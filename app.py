@@ -1,8 +1,8 @@
 from flask import Flask, request, send_file
 import qrcode
 from PIL import Image
-import io
 import requests
+import io
 
 app = Flask(__name__)
 
@@ -27,11 +27,12 @@ def generate():
     if not data:
         return "Missing QR data"
 
-    # Generate QR code
+    # Create QR Code
     qr = qrcode.QRCode(
+        version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=10,
-        border=4
+        border=4,
     )
 
     qr.add_data(data)
@@ -39,7 +40,7 @@ def generate():
 
     img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
 
-    # If logo provided, overlay it
+    # If logo URL provided, overlay it
     if logo_url:
         try:
             response = requests.get(logo_url, timeout=10)
@@ -51,7 +52,7 @@ def generate():
 
             # Logo size = 25% of QR width
             logo_size = qr_width // 4
-            logo = logo.resize((logo_size, logo_size))
+            logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
 
             # Center position
             pos = (
@@ -64,7 +65,6 @@ def generate():
         except Exception as e:
             return f"Logo load failed: {str(e)}"
 
-    # Output image
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     buffer.seek(0)
@@ -73,4 +73,3 @@ def generate():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-X-
