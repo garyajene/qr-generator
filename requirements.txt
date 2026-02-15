@@ -1,4 +1,4 @@
 flask
-qrcode
+qrcode[pil]
 pillow
 requests
