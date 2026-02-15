@@ -2,13 +2,14 @@ from flask import Flask, request, send_file
 import qrcode
 from PIL import Image
 import io
+import requests
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return """
-    <h2>QR Code Generator with Logo</h2>
+    <h2>QR Code Generator with Logo Overlay</h2>
     <form action="/generate" method="get">
         <input type="text" name="data" placeholder="Enter URL or text" required>
         <br><br>
@@ -23,31 +24,47 @@ def generate():
     data = request.args.get("data")
     logo_url = request.args.get("logo")
 
+    if not data:
+        return "Missing QR data"
+
+    # Generate QR code
     qr = qrcode.QRCode(
-        error_correction=qrcode.constants.ERROR_CORRECT_H
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=4
     )
+
     qr.add_data(data)
     qr.make(fit=True)
 
-    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
 
+    # If logo provided, overlay it
     if logo_url:
         try:
-            import requests
-            response = requests.get(logo_url)
-            logo = Image.open(io.BytesIO(response.content))
+            response = requests.get(logo_url, timeout=10)
+            response.raise_for_status()
 
-            # Resize logo
+            logo = Image.open(io.BytesIO(response.content)).convert("RGBA")
+
             qr_width, qr_height = img.size
+
+            # Logo size = 25% of QR width
             logo_size = qr_width // 4
             logo = logo.resize((logo_size, logo_size))
 
-            # Center logo
-            pos = ((qr_width - logo_size) // 2, (qr_height - logo_size) // 2)
-            img.paste(logo, pos, mask=logo if logo.mode == "RGBA" else None)
-        except:
-            pass
+            # Center position
+            pos = (
+                (qr_width - logo_size) // 2,
+                (qr_height - logo_size) // 2
+            )
 
+            img.paste(logo, pos, logo)
+
+        except Exception as e:
+            return f"Logo load failed: {str(e)}"
+
+    # Output image
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     buffer.seek(0)
@@ -56,3 +73,4 @@ def generate():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+X-
