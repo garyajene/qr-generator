@@ -1,8 +1,9 @@
 from flask import Flask, request, send_file, Response
-import qrcode
-from PIL import Image, ImageDraw
-import requests
 from io import BytesIO
+import requests
+from PIL import Image, ImageDraw
+import segno  # used for mask pattern selection + matrix access
+import math
 
 app = Flask(__name__)
 
@@ -11,7 +12,7 @@ HTML = """
 <html>
 <head>
 <meta charset="utf-8" />
-<title>QR Art Mask (Black + White Dots, Conservative)</title>
+<title>Repo-Style QR Art (Mask Select + Conservative)</title>
 <style>
   body { font-family: Arial, sans-serif; margin: 40px; }
   h1 { margin-bottom: 8px; }
@@ -21,11 +22,10 @@ HTML = """
   button { margin-top: 18px; padding: 10px 18px; font-size: 18px; cursor:pointer; }
   .hint { margin-top: 16px; color: #555; line-height: 1.35; }
   .small { font-weight: 400; }
-  code { background:#f4f4f4; padding:2px 6px; border-radius:6px; }
 </style>
 </head>
 <body>
-  <h1>QR Art Mask (Repo-style: Black + White Dots)</h1>
+  <h1>Repo-Style QR Art (Scannable)</h1>
 
   <form action="/generate" method="get">
     <label>QR Data <span class="small">(URL or text)</span></label>
@@ -34,17 +34,14 @@ HTML = """
     <label>Artwork Image URL <span class="small">(optional)</span></label>
     <input type="text" name="art" placeholder="https://.../image.png" />
 
-    <label>Black Dot Size <span class="small">(0.55–0.90). Default 0.70</span></label>
-    <input type="text" name="dot" value="0.70" />
+    <label>Dot Size <span class="small">(0.55–0.92). Default 0.78</span></label>
+    <input type="text" name="dot" value="0.78" />
 
-    <label>White Dot Strength <span class="small">(0.00–1.00). Default 0.90</span></label>
-    <input type="text" name="white" value="0.90" />
+    <label>Art Wash <span class="small">(0.00–0.60). Default 0.20 — higher = safer scan</span></label>
+    <input type="text" name="wash" value="0.20" />
 
-    <label>Art Wash <span class="small">(0.00–0.60). Default 0.18 — higher = safer scan</span></label>
-    <input type="text" name="wash" value="0.18" />
-
-    <label>Mask Strength <span class="small">(0.00–0.15). Default 0.07 — conservative module removal budget</span></label>
-    <input type="text" name="mask" value="0.07" />
+    <label>Suppression Budget <span class="small">(0.00–0.18). Default 0.08 — % of dark modules removed</span></label>
+    <input type="text" name="budget" value="0.08" />
 
     <div class="row">
       <button type="submit">Generate QR</button>
@@ -52,8 +49,8 @@ HTML = """
     </div>
 
     <div class="hint">
-      This generator draws <b>black dots for dark modules</b> and <b>white dots for light modules</b> (mainly on dark art areas),
-      while keeping all QR structural regions exact for scanning.
+      This version selects the best QR mask (0–7) for your image, then conservatively suppresses
+      a small percentage of dark modules in bright image areas, and renders <b>both black and white dots</b>.
     </div>
   </form>
 </body>
@@ -63,16 +60,12 @@ HTML = """
 def clamp(v, lo, hi, default):
     try:
         x = float(v)
-        if x < lo:
-            return lo
-        if x > hi:
-            return hi
-        return x
+        return max(lo, min(hi, x))
     except Exception:
         return default
 
 def fetch_image(url: str) -> Image.Image:
-    resp = requests.get(url, timeout=12)
+    resp = requests.get(url, timeout=15)
     resp.raise_for_status()
     return Image.open(BytesIO(resp.content)).convert("RGBA")
 
@@ -90,18 +83,16 @@ def qr_size_from_version(version: int) -> int:
     return 17 + 4 * version
 
 def alignment_centers(version: int):
-    # Standard QR alignment center positions (conservative approximation).
+    # Standard alignment pattern centers for QR codes
     if version <= 1:
         return []
     n = qr_size_from_version(version)
     num = version // 7 + 2
     if num == 2:
         return [6, n - 7]
-
     step = (n - 13) // (num - 1)
     if step % 2 == 1:
         step += 1
-
     centers = [6]
     last = n - 7
     for i in range(num - 2):
@@ -110,7 +101,7 @@ def alignment_centers(version: int):
     return centers
 
 def in_finder_or_separator(r, c, n):
-    # Protect 9x9 around each finder (includes the white separator border).
+    # 9x9 around finder includes white separator
     if r <= 8 and c <= 8:
         return True
     if r <= 8 and c >= n - 9:
@@ -120,7 +111,6 @@ def in_finder_or_separator(r, c, n):
     return False
 
 def in_timing(r, c, n):
-    # Timing patterns at row 6 and col 6 (excluding finder zones)
     if r == 6 and 8 <= c <= n - 9:
         return True
     if c == 6 and 8 <= r <= n - 9:
@@ -128,7 +118,6 @@ def in_timing(r, c, n):
     return False
 
 def in_format_info(r, c, n):
-    # Format info near row/col 8 around finder areas
     if r == 8 and (c <= 8 or c >= n - 9):
         return True
     if c == 8 and (r <= 8 or r >= n - 9):
@@ -144,7 +133,7 @@ def in_alignment(r, c, version):
     n = qr_size_from_version(version)
     for cy in centers:
         for cx in centers:
-            # skip overlap with finder zones
+            # skip overlaps with finder zones
             if (cx == 6 and cy == 6) or (cx == 6 and cy == n - 7) or (cx == n - 7 and cy == 6):
                 continue
             if abs(r - cy) <= 2 and abs(c - cx) <= 2:
@@ -159,6 +148,33 @@ def is_protected(r, c, n, version):
         or in_alignment(r, c, version)
     )
 
+def matrix_from_segno(qr) -> list[list[bool]]:
+    # segno returns iterable rows of 0/1 ints
+    m = []
+    for row in qr.matrix:
+        m.append([bool(v) for v in row])
+    return m
+
+def score_mask(matrix, luma, version):
+    # We want dark modules to align with darker image areas (low luminance).
+    # Higher score = better alignment.
+    n = len(matrix)
+    s = 0.0
+    count = 0
+    for r in range(n):
+        for c in range(n):
+            if is_protected(r, c, n, version):
+                continue
+            y = luma[r][c]
+            if matrix[r][c]:
+                # dark module: prefer low luminance
+                s += (255.0 - y)
+            else:
+                # light module: prefer high luminance (weaker weight)
+                s += 0.35 * y
+            count += 1
+    return s / max(1, count)
+
 @app.route("/")
 def home():
     return Response(HTML, mimetype="text/html")
@@ -172,60 +188,95 @@ def generate():
     data = (request.args.get("data") or "").strip()
     art_url = (request.args.get("art") or "").strip()
 
-    black_dot = clamp(request.args.get("dot"), 0.55, 0.90, 0.70)
-    white_strength = clamp(request.args.get("white"), 0.00, 1.00, 0.90)
-    wash = clamp(request.args.get("wash"), 0.00, 0.60, 0.18)
-    mask_strength = clamp(request.args.get("mask"), 0.00, 0.15, 0.07)
+    dot_scale = clamp(request.args.get("dot"), 0.55, 0.92, 0.78)
+    wash = clamp(request.args.get("wash"), 0.00, 0.60, 0.20)
+    budget = clamp(request.args.get("budget"), 0.00, 0.18, 0.08)
 
     if not data:
         return "Missing QR data", 400
 
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=0
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
+    # Generate base QR(s)
+    # We'll select best mask 0..7 if art is present, otherwise use default.
+    best_qr = None
+    best_matrix = None
+    best_version = None
+    best_mask = None
 
-    matrix = qr.get_matrix()  # modules only
-    n = len(matrix)
-    version = qr.version or 1
-
-    # Rendering scale
+    # Render params
     box = 16
     quiet = 6
-    size = (n + 2 * quiet) * box
 
-    # Canvas starts white
-    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
-
-    # Artwork + luminance grid
-    luma = None
+    # Prepare art if provided
     art_ok = False
+    luma = None
+    art_img = None
+
     if art_url:
         try:
-            art = fetch_image(art_url).resize((n * box, n * box), Image.LANCZOS)
-            if wash > 0:
-                overlay = Image.new("RGBA", art.size, (255, 255, 255, int(255 * wash)))
-                art = Image.alpha_composite(art, overlay)
-
-            canvas.paste(art, (quiet * box, quiet * box), art)
-
-            tiny = art.resize((n, n), Image.BOX).convert("RGBA")
-            px = tiny.load()
-            luma = [[float(luminance_rgba(px[c, r])) for c in range(n)] for r in range(n)]
+            # We don't yet know n; we’ll resize after generating a first QR to get n/version.
+            art_img = fetch_image(art_url)
             art_ok = True
         except Exception:
             art_ok = False
-            luma = None
+            art_img = None
+
+    # If no art, just make one QR (default mask)
+    if not art_ok:
+        qr0 = segno.make(data, error='h')  # highest error correction
+        best_qr = qr0
+        best_matrix = matrix_from_segno(qr0)
+        best_version = int(qr0.version)
+        best_mask = None
+    else:
+        # Try all masks 0-7, score against image luminance grid, pick best
+        # Create a temporary QR to get size/version for image resizing
+        tmp = segno.make(data, error='h', mask=0)
+        n = tmp.symbol_size()[0]
+        version = int(tmp.version)
+
+        art_resized = art_img.convert("RGBA").resize((n * box, n * box), Image.LANCZOS)
+        if wash > 0:
+            overlay = Image.new("RGBA", art_resized.size, (255, 255, 255, int(255 * wash)))
+            art_resized = Image.alpha_composite(art_resized, overlay)
+
+        tiny = art_resized.resize((n, n), Image.BOX).convert("RGBA")
+        px = tiny.load()
+        luma = [[float(luminance_rgba(px[c, r])) for c in range(n)] for r in range(n)]
+
+        best_score = -1e18
+        for mask in range(8):
+            qr_i = segno.make(data, error='h', mask=mask)
+            m_i = matrix_from_segno(qr_i)
+            v_i = int(qr_i.version)
+            # version should match; still safe if not
+            sc = score_mask(m_i, luma, v_i)
+            if sc > best_score:
+                best_score = sc
+                best_qr = qr_i
+                best_matrix = m_i
+                best_version = v_i
+                best_mask = mask
+
+        # Keep the resized art for final drawing
+        art_img = art_resized
+
+    matrix = best_matrix
+    n = len(matrix)
+    version = best_version
+
+    size = (n + 2 * quiet) * box
+    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+
+    # Place artwork underneath (only in module area, not quiet zone)
+    if art_ok and art_img is not None:
+        canvas.paste(art_img, (quiet * box, quiet * box), art_img)
 
     draw = ImageDraw.Draw(canvas)
 
-    # Conservative masking: remove a small % of non-protected dark modules
+    # Conservative suppression: remove a small % of non-protected DARK modules,
+    # chosen where image is brightest (to reveal image).
     removed = set()
-    if art_ok and luma is not None and mask_strength > 0:
+    if art_ok and luma is not None and budget > 0:
         candidates = []
         dark_count = 0
         for r in range(n):
@@ -235,26 +286,25 @@ def generate():
                 if is_protected(r, c, n, version):
                     continue
                 dark_count += 1
-                # brighter art => better candidate to remove (reveals image)
                 candidates.append((luma[r][c], r, c))
 
-        candidates.sort(reverse=True, key=lambda x: x[0])
-        k = int(dark_count * mask_strength)
-        k = min(k, 2000)
+        candidates.sort(reverse=True, key=lambda x: x[0])  # brightest first
+        k = int(dark_count * budget)
+        # extra guardrail
+        k = min(k, 2500)
         for i in range(k):
             _, rr, cc = candidates[i]
             removed.add((rr, cc))
 
-    # Helper for dot drawing
-    def draw_dot(x0, y0, x1, y1, scale, color):
+    # Dot draw helper (binary, no transparency)
+    def draw_dot(x0, y0, x1, y1, scale, rgb):
         pad = (1.0 - scale) * box / 2.0
-        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
+        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=rgb)
 
-    # Main render
-    # Key idea:
-    # - Protected areas: exact black/white squares (no art influence)
-    # - Dark modules: black dots (unless removed)
-    # - Light modules: optional white dots when background is dark (this creates the repo look)
+    # Render matrix
+    # - Protected modules: exact square black/white (hard override)
+    # - Non-protected: black or white dots (both structural)
+    # - Removed dark modules: leave background/art visible
     for r in range(n):
         for c in range(n):
             x0 = (quiet + c) * box
@@ -263,53 +313,30 @@ def generate():
             y1 = y0 + box
 
             if is_protected(r, c, n, version):
-                # Block artwork here and draw exact matrix
+                # block art influence here
                 if matrix[r][c]:
-                    draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 255))
+                    draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0))
                 else:
-                    draw.rectangle([x0, y0, x1, y1], fill=(255, 255, 255, 255))
+                    draw.rectangle([x0, y0, x1, y1], fill=(255, 255, 255))
                 continue
 
-            bg_l = 255.0
-            if art_ok and luma is not None:
-                bg_l = luma[r][c]
+            if matrix[r][c]:
+                # dark module
+                if (r, c) in removed:
+                    continue
+                draw_dot(x0, y0, x1, y1, dot_scale, (0, 0, 0))
+            else:
+                # light module
+                # Render as white dot (structural), slightly smaller so the art can appear in gaps.
+                white_scale = max(0.45, min(0.88, dot_scale * 0.88))
+                draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255))
 
-            # Light module
-            if not matrix[r][c]:
-                if art_ok and luma is not None:
-                    # White dot alpha increases on darker backgrounds only
-                    # target=170 means: below 170 (darker), white dots begin to show
-                    target = 170.0
-                    darkness = max(0.0, min(1.0, (target - bg_l) / target))
-                    alpha = int(255 * white_strength * darkness)
-
-                    # Only draw if visible enough (prevents muddy gray everywhere)
-                    if alpha >= 35:
-                        # Slightly smaller than black dots for cleaner look
-                        white_scale = max(0.45, min(0.80, black_dot * 0.85))
-                        draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255, alpha))
-                # If no art, do nothing (white on white is pointless)
-                continue
-
-            # Dark module
-            if (r, c) in removed:
-                continue
-
-            # Mild adaptive black-dot sizing (helps “image feel” without breaking scan)
-            scale = black_dot
-            if art_ok and luma is not None:
-                t = bg_l / 255.0  # 0 dark -> 1 light
-                scale = black_dot + (0.10 * (0.5 - t))
-                scale = max(0.55, min(0.90, scale))
-
-            draw_dot(x0, y0, x1, y1, scale, (0, 0, 0, 255))
-
-    # Quiet zone forced pure white (critical for scanning)
+    # Quiet zone pure white
     qpx = quiet * box
-    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255, 255))
-    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255, 255))
-    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255, 255))
-    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255, 255))
+    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255))
+    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255))
+    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255))
+    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255))
 
     out = BytesIO()
     canvas.convert("RGB").save(out, format="PNG", optimize=True)
