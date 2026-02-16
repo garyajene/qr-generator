@@ -59,10 +59,13 @@ def fetch_image(url):
     resp.raise_for_status()
     return Image.open(BytesIO(resp.content)).convert("RGBA")
 
-def is_protected(r, c, n):
+def in_finder(r, c, n):
     if r <= 6 and c <= 6: return True
     if r <= 6 and c >= n-7: return True
     if r >= n-7 and c <= 6: return True
+    return False
+
+def in_timing_or_format(r, c, n):
     if r == 6 or c == 6: return True
     if r == 8 or c == 8: return True
     return False
@@ -123,37 +126,42 @@ def generate():
             x1 = x0 + box
             y1 = y0 + box
 
-            if not matrix[r][c]:
+            # 🔒 FULL FINDER PATTERN RESTORATION
+            if in_finder(r,c,n):
+                if matrix[r][c]:
+                    draw.rectangle([x0,y0,x1,y1],fill=(0,0,0,255))
+                else:
+                    draw.rectangle([x0,y0,x1,y1],fill=(255,255,255,255))
                 continue
 
-            if is_protected(r,c,n):
-                draw.rectangle([x0,y0,x1,y1],fill=(0,0,0,255))
+            # 🔒 Timing + format protected
+            if in_timing_or_format(r,c,n):
+                if matrix[r][c]:
+                    draw.rectangle([x0,y0,x1,y1],fill=(0,0,0,255))
+                else:
+                    draw.rectangle([x0,y0,x1,y1],fill=(255,255,255,255))
+                continue
+
+            # Light modules
+            if not matrix[r][c]:
                 continue
 
             bg = 255
             if luma_grid:
                 bg = luma_grid[r][c]
 
-            # Normalize brightness
             t = bg / 255.0
 
-            # Adaptive dot size
-            dot_scale = base_dot + (0.10 * (0.5 - t))
+            dot_scale = base_dot + (0.12 * (0.5 - t))
             dot_scale = max(0.60,min(0.90,dot_scale))
 
             pad = (1-dot_scale)*box/2
 
-            # Polarity Modulation
-            if luma_grid:
-                # Dark background → lighter module center
-                if t < 0.45:
-                    draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad],fill=(0,0,0,255))
-                    inner = pad + box*(0.15*pol_strength)
-                    draw.ellipse([x0+inner,y0+inner,x1-inner,y1-inner],fill=(255,255,255,255))
-                # Light background → deeper black module
-                else:
-                    darkness = int(255*(1 - (t*0.3)))
-                    draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad],fill=(0,0,0,darkness))
+            # Polarity modulation (safe version)
+            if luma_grid and t < 0.45:
+                draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad],fill=(0,0,0,255))
+                inner = pad + box*(0.18*pol_strength)
+                draw.ellipse([x0+inner,y0+inner,x1-inner,y1-inner],fill=(255,255,255,255))
             else:
                 draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad],fill=(0,0,0,255))
 
