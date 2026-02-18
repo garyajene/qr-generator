@@ -11,17 +11,16 @@ HTML = """
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Repo-Style QR Art (Stable + Centered)</title>
+<title>Repo-Style QR Art</title>
 <style>
   body { font-family: Arial, sans-serif; margin: 40px; }
-  h1 { margin-bottom: 8px; }
   label { display:block; margin-top: 16px; font-weight: 700; }
   input { width: 780px; max-width: 95vw; padding: 10px; font-size: 16px; }
   button { margin-top: 18px; padding: 10px 18px; font-size: 18px; cursor:pointer; }
 </style>
 </head>
 <body>
-  <h1>Repo-Style QR Art (Stable + Centered)</h1>
+  <h1>Repo-Style QR Art</h1>
   <form action="/generate" method="get">
     <label>QR Data</label>
     <input type="text" name="data" required />
@@ -64,18 +63,21 @@ def generate():
     if not data:
         return "Missing data", 400
 
-    qr = segno.make(data, error='h')
+    # Generate QR with NO internal border
+    qr = segno.make(data, error='h', border=0)
+
     matrix = [[bool(v) for v in row] for row in qr.matrix]
     n = len(matrix)
 
     box = 16
-    quiet = 6
+    quiet = 6  # manual quiet zone (only one)
+
     qr_pixel_size = n * box
-    size = (n + 2 * quiet) * box
+    total_size = (n + quiet * 2) * box
 
-    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+    canvas = Image.new("RGBA", (total_size, total_size), (255, 255, 255, 255))
 
-    # --- Centered Artwork Using TRUE Matrix Size ---
+    # ---- Center Artwork Correctly ----
     if art_url:
         try:
             art = fetch_image(art_url)
@@ -100,6 +102,7 @@ def generate():
         pad = (1.0 - scale) * box / 2.0
         draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
 
+    # Render QR
     for r in range(n):
         for c in range(n):
             x0 = (quiet + c) * box
@@ -112,12 +115,6 @@ def generate():
             else:
                 white_scale = max(0.45, min(0.88, dot_scale * 0.88))
                 draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255))
-
-    qpx = quiet * box
-    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255))
-    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255))
-    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255))
-    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255))
 
     out = BytesIO()
     canvas.convert("RGB").save(out, format="PNG", optimize=True)
