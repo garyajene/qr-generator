@@ -74,4 +74,71 @@ def generate():
         return "Missing data", 400
 
     qr = segno.make(data, error="h")
-    matrix = [[bool(v) for v in row] for row in qr.]()
+    matrix = [[bool(v) for v in row] for row in qr.matrix]
+
+    n = len(matrix)
+    box = 16
+    quiet = 6
+
+    size = (n + quiet * 2) * box
+    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    # === ART CENTERING FIX ===
+    art_img = None
+    if art_url:
+        try:
+            resp = requests.get(art_url, timeout=10)
+            art_img = Image.open(BytesIO(resp.content)).convert("RGBA")
+        except:
+            art_img = None
+
+    if art_img:
+        qr_pixels = n * box
+
+        # Resize art to EXACT QR pixel size
+        art_img = art_img.resize((qr_pixels, qr_pixels), Image.LANCZOS)
+
+        if wash > 0:
+            overlay = Image.new("RGBA", art_img.size, (255,255,255,int(255*wash)))
+            art_img = Image.alpha_composite(art_img, overlay)
+
+        # Center precisely inside module area
+        offset = quiet * box
+        canvas.paste(art_img, (offset, offset), art_img)
+
+    # Draw modules
+    for r in range(n):
+        for c in range(n):
+
+            x0 = (quiet + c) * box
+            y0 = (quiet + r) * box
+            x1 = x0 + box
+            y1 = y0 + box
+
+            if matrix[r][c]:
+                pad = (1 - dot_scale) * box / 2
+                draw.ellipse(
+                    [x0+pad, y0+pad, x1-pad, y1-pad],
+                    fill=(0,0,0)
+                )
+            else:
+                white_scale = dot_scale * 0.88
+                pad = (1 - white_scale) * box / 2
+                draw.ellipse(
+                    [x0+pad, y0+pad, x1-pad, y1-pad],
+                    fill=(255,255,255)
+                )
+
+    # Quiet zone repaint
+    qpx = quiet * box
+    draw.rectangle([0,0,size,qpx], fill=(255,255,255))
+    draw.rectangle([0,size-qpx,size,size], fill=(255,255,255))
+    draw.rectangle([0,0,qpx,size], fill=(255,255,255))
+    draw.rectangle([size-qpx,0,size,size], fill=(255,255,255))
+
+    out = BytesIO()
+    canvas.convert("RGB").save(out, format="PNG")
+    out.seek(0)
+
+    return send_file(out, mimetype="image/png")
