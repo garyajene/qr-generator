@@ -123,7 +123,6 @@ def generate():
 
     canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
 
-    # ---- KEEP EXISTING ARTWORK SCALING BEHAVIOR ----
     if art_url:
         try:
             art = fetch_image(art_url)
@@ -131,9 +130,12 @@ def generate():
             canvas.paste(art_resized, (quiet * box, quiet * box), art_resized)
         except:
             pass
-    # -------------------------------------------------
 
     draw = ImageDraw.Draw(canvas)
+
+    # 🔬 Controlled experiment: reduced dot sizes
+    black_dot_scale = 0.68
+    white_dot_scale = black_dot_scale * 0.85
 
     def draw_dot(x0, y0, x1, y1, scale, color):
         pad = (1 - scale) * box / 2
@@ -142,8 +144,6 @@ def generate():
             fill=color
         )
 
-    dot_scale = 0.78
-
     for r in range(n):
         for c in range(n):
             x0 = (quiet + c) * box
@@ -151,7 +151,7 @@ def generate():
             x1 = x0 + box
             y1 = y0 + box
 
-            # 🔒 HARD INVARIANT: Protected zones render as squares ONLY
+            # 🔒 Protected zones remain solid squares
             if is_protected(r, c, n, version):
                 if matrix[r][c]:
                     draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0))
@@ -159,13 +159,12 @@ def generate():
                     draw.rectangle([x0, y0, x1, y1], fill=(255, 255, 255))
                 continue
 
-            # Non-protected modules render as dots
             if matrix[r][c]:
-                draw_dot(x0, y0, x1, y1, dot_scale, (0, 0, 0))
+                draw_dot(x0, y0, x1, y1, black_dot_scale, (0, 0, 0))
             else:
-                draw_dot(x0, y0, x1, y1, dot_scale * 0.85, (255, 255, 255))
+                draw_dot(x0, y0, x1, y1, white_dot_scale, (255, 255, 255))
 
-    # 🔒 HARD INVARIANT: Quiet zone enforcement
+    # Quiet zone enforcement
     qpx = quiet * box
     draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255))
     draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255))
