@@ -38,10 +38,12 @@ WHITE_SCALE_FACTOR = 0.88
 WASH = 0.20
 BUDGET = 0.08
 
+
 def fetch_image(url):
     r = requests.get(url, timeout=15)
     r.raise_for_status()
     return Image.open(BytesIO(r.content)).convert("RGBA")
+
 
 def luminance_rgba(px):
     r, g, b, a = px
@@ -53,8 +55,10 @@ def luminance_rgba(px):
     b = b * alpha + 255 * (1 - alpha)
     return 0.299 * r + 0.587 * g + 0.114 * b
 
+
 def qr_size_from_version(version):
     return 17 + 4 * version
+
 
 def alignment_centers(version):
     if version <= 1:
@@ -73,6 +77,7 @@ def alignment_centers(version):
     centers.append(last)
     return centers
 
+
 def in_finder_or_separator(r, c, n):
     if r <= 8 and c <= 8:
         return True
@@ -82,6 +87,7 @@ def in_finder_or_separator(r, c, n):
         return True
     return False
 
+
 def in_timing(r, c, n):
     if r == 6 and 8 <= c <= n - 9:
         return True
@@ -89,12 +95,14 @@ def in_timing(r, c, n):
         return True
     return False
 
+
 def in_format_info(r, c, n):
     if r == 8 and (c <= 8 or c >= n - 9):
         return True
     if c == 8 and (r <= 8 or r >= n - 9):
         return True
     return False
+
 
 def in_alignment(r, c, version):
     if version <= 1:
@@ -109,6 +117,7 @@ def in_alignment(r, c, version):
                 return True
     return False
 
+
 def is_protected(r, c, n, version):
     return (
         in_finder_or_separator(r, c, n)
@@ -117,8 +126,10 @@ def is_protected(r, c, n, version):
         or in_alignment(r, c, version)
     )
 
+
 def matrix_from_segno(qr):
     return [[bool(v) for v in row] for row in qr.matrix]
+
 
 def score_mask(matrix, luma, version):
     n = len(matrix)
@@ -136,9 +147,11 @@ def score_mask(matrix, luma, version):
             count += 1
     return s / max(1, count)
 
+
 @app.route("/")
 def home():
     return Response(HTML, mimetype="text/html")
+
 
 @app.route("/generate")
 def generate():
@@ -148,86 +161,27 @@ def generate():
     if not data:
         return "Missing data", 400
 
-    art_ok = False
-    art_img = None
-    luma = None
-
-    if art_url:
-        try:
-            art_img = fetch_image(art_url)
-            art_ok = True
-        except:
-            art_ok = False
-
-    if not art_ok:
-        qr_best = segno.make(data, error=ERROR_LEVEL)
-        matrix = matrix_from_segno(qr_best)
-        version = int(qr_best.version)
-        art_resized = None
-    else:
-        tmp = segno.make(data, error=ERROR_LEVEL, mask=0)
-        n_tmp = tmp.symbol_size()[0]
-        version = int(tmp.version)
-
-        # 🔥 NO CROPPING — direct resize (restores centering)
-        art_resized = art_img.resize((n_tmp * BOX, n_tmp * BOX), Image.LANCZOS)
-
-        if WASH > 0:
-            overlay = Image.new("RGBA", art_resized.size, (255,255,255,int(255*WASH)))
-            art_resized = Image.alpha_composite(art_resized, overlay)
-
-        tiny = art_resized.resize((n_tmp, n_tmp), Image.BOX).convert("RGBA")
-        px = tiny.load()
-        luma = [[float(luminance_rgba(px[c, r])) for c in range(n_tmp)] for r in range(n_tmp)]
-
-        best_score = -1e18
-        qr_best = None
-        best_matrix = None
-
-        for mask in range(8):
-            qr_i = segno.make(data, error=ERROR_LEVEL, mask=mask)
-            m_i = matrix_from_segno(qr_i)
-            v_i = int(qr_i.version)
-            sc = score_mask(m_i, luma, v_i)
-            if sc > best_score:
-                best_score = sc
-                qr_best = qr_i
-                best_matrix = m_i
-                version = v_i
-
-        matrix = best_matrix
-
+    qr = segno.make(data, error=ERROR_LEVEL)
+    matrix = matrix_from_segno(qr)
+    version = int(qr.version)
     n = len(matrix)
+
     size = (n + 2 * QUIET) * BOX
-    canvas = Image.new("RGBA", (size, size), (255,255,255,255))
+    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    if art_ok and art_resized:
-        ox = QUIET * BOX
-        oy = QUIET * BOX
-        canvas.paste(art_resized, (ox, oy), art_resized)
+    # ORIGINAL WORKING CENTERING LOGIC
+    if art_url:
+        try:
+            art = fetch_image(art_url)
+            art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
+            canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
+        except:
+            pass
 
-    removed = set()
-    if art_ok and luma and BUDGET > 0:
-        candidates = []
-        dark_count = 0
-        for r in range(n):
-            for c in range(n):
-                if not matrix[r][c]:
-                    continue
-                if is_protected(r,c,n,version):
-                    continue
-                dark_count += 1
-                candidates.append((luma[r][c], r, c))
-        candidates.sort(reverse=True)
-        k = min(int(dark_count * BUDGET), 2500)
-        for i in range(k):
-            _, rr, cc = candidates[i]
-            removed.add((rr,cc))
-
-    def draw_dot(x0,y0,x1,y1,scale,color):
-        pad = (1-scale)*BOX/2
-        draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad], fill=color)
+    def draw_dot(x0, y0, x1, y1, scale, color):
+        pad = (1 - scale) * BOX / 2
+        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
 
     for r in range(n):
         for c in range(n):
@@ -236,31 +190,31 @@ def generate():
             x1 = x0 + BOX
             y1 = y0 + BOX
 
-            if is_protected(r,c,n,version):
+            if is_protected(r, c, n, version):
                 if matrix[r][c]:
-                    draw.rectangle([x0,y0,x1,y1], fill=(0,0,0))
+                    draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0))
                 else:
-                    draw.rectangle([x0,y0,x1,y1], fill=(255,255,255))
+                    draw.rectangle([x0, y0, x1, y1], fill=(255, 255, 255))
                 continue
 
             if matrix[r][c]:
-                if (r,c) in removed:
-                    continue
-                draw_dot(x0,y0,x1,y1,DOT_SCALE,(0,0,0))
+                draw_dot(x0, y0, x1, y1, DOT_SCALE, (0, 0, 0))
             else:
-                white_scale = max(0.35, min(0.85, DOT_SCALE*WHITE_SCALE_FACTOR))
-                draw_dot(x0,y0,x1,y1,white_scale,(255,255,255))
+                white_scale = max(0.35, min(0.85, DOT_SCALE * WHITE_SCALE_FACTOR))
+                draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255))
 
+    # Quiet zone enforcement
     qpx = QUIET * BOX
-    draw.rectangle([0,0,size,qpx], fill=(255,255,255))
-    draw.rectangle([0,size-qpx,size,size], fill=(255,255,255))
-    draw.rectangle([0,0,qpx,size], fill=(255,255,255))
-    draw.rectangle([size-qpx,0,size,size], fill=(255,255,255))
+    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255))
+    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255))
+    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255))
+    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255))
 
     out = BytesIO()
     canvas.convert("RGB").save(out, format="PNG", optimize=True)
     out.seek(0)
     return send_file(out, mimetype="image/png")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
