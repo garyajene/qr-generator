@@ -1,7 +1,7 @@
-from flask import Flask, request, send_file, Response
+from flask import Flask, request, Response
 from io import BytesIO
 import requests
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageDraw, ImageStat, UnidentifiedImageError
 import segno
 
 app = Flask(__name__)
@@ -26,7 +26,7 @@ body { font-family: Arial; padding: 30px; }
     margin-bottom: 10px;
 }
 #dropzone.hover { border-color: #000; }
-img { max-width: 300px; margin-top: 10px; }
+img { max-width: 300px; margin-top: 10px; display:block; }
 </style>
 </head>
 <body>
@@ -61,7 +61,9 @@ dropzone.onclick = () => fileInput.click();
 
 fileInput.onchange = () => {
     const file = fileInput.files[0];
-    if (file) preview.src = URL.createObjectURL(file);
+    if (file) {
+        preview.src = URL.createObjectURL(file);
+    }
 };
 
 dropzone.addEventListener("dragover", e => {
@@ -77,10 +79,9 @@ dropzone.addEventListener("drop", e => {
     e.preventDefault();
     dropzone.classList.remove("hover");
 
-    const file = e.dataTransfer.files[0];
-    if (file) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         fileInput.files = e.dataTransfer.files;
-        preview.src = URL.createObjectURL(file);
+        preview.src = URL.createObjectURL(e.dataTransfer.files[0]);
     }
 });
 </script>
@@ -101,14 +102,28 @@ def fetch_image(url):
     return Image.open(BytesIO(r.content)).convert("RGBA")
 
 
+def load_uploaded_image(file_storage):
+    if not file_storage or file_storage.filename == "":
+        return None
+    try:
+        data = file_storage.read()
+        if not data:
+            return None
+        img = Image.open(BytesIO(data))
+        img.load()
+        return img.convert("RGBA")
+    except UnidentifiedImageError:
+        return None
+    except Exception:
+        return None
+
+
 def analyze_complexity(img):
     gray = img.convert("L")
     stat = ImageStat.Stat(gray)
-
     stddev = stat.stddev[0] / 255.0
     extrema = gray.getextrema()
     range_val = (extrema[1] - extrema[0]) / 255.0
-
     complexity = (stddev * 0.7) + (range_val * 0.3)
     return min(1.0, complexity)
 
@@ -199,7 +214,7 @@ def generate():
     art_file = request.files.get("artfile")
 
     if not data:
-        return "Missing data", 400
+        return Response("Missing data", status=400, mimetype="text/plain")
 
     qr = segno.make(data, error=ERROR_LEVEL)
     matrix = matrix_from_segno(qr)
@@ -213,27 +228,23 @@ def generate():
     art = None
 
     if art_file and art_file.filename != "":
-        try:
-            art = Image.open(art_file.stream).convert("RGBA")
-        except:
-            art = None
+        art = load_uploaded_image(art_file)
     elif art_url:
         try:
             art = fetch_image(art_url)
-        except:
+        except Exception:
             art = None
 
-    DOT_SCALE = 0.48
+    dot_scale = 0.48
 
     if art:
         complexity = analyze_complexity(art)
-        DOT_SCALE = get_adaptive_dot_scale(complexity)
-
+        dot_scale = get_adaptive_dot_scale(complexity)
         art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
         canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
 
     def draw_dot(x0, y0, x1, y1, scale, color):
-        pad = (1 - scale) * BOX / 2
+        pad = (1.0 - scale) * BOX / 2.0
         draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
 
     for r in range(n):
@@ -244,29 +255,45 @@ def generate():
             y1 = y0 + BOX
 
             if is_protected(r, c, n, version):
-                draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0) if matrix[r][c] else (255, 255, 255))
+                draw.rectangle(
+                    [x0, y0, x1, y1],
+                    fill=(0, 0, 0, 255) if matrix[r][c] else (255, 255, 255, 255)
+                )
                 continue
 
             if matrix[r][c]:
-                draw_dot(x0, y0, x1, y1, DOT_SCALE, (0, 0, 0))
+                draw_dot(x0, y0, x1, y1, dot_scale, (0, 0, 0, 255))
             else:
-                white_scale = max(0.35, min(0.85, DOT_SCALE * WHITE_SCALE_FACTOR))
-                draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255))
+                white_scale = max(0.35, min(0.85, dot_scale * WHITE_SCALE_FACTOR))
+                draw_dot(x0, y0, x1, y1, white_scale, (255, 255, 255, 255))
 
     qpx = QUIET * BOX
-    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255))
-    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255))
-    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255))
-    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255))
+    draw.rectangle([0, 0, size, qpx], fill=(255, 255, 255, 255))
+    draw.rectangle([0, size - qpx, size, size], fill=(255, 255, 255, 255))
+    draw.rectangle([0, 0, qpx, size], fill=(255, 255, 255, 255))
+    draw.rectangle([size - qpx, 0, size, size], fill=(255, 255, 255, 255))
 
     out = BytesIO()
 
-    # ✅ FIXED PNG EXPORT (NO CORRUPTION)
-    canvas.save(out, format="PNG")
+    # Force plain, standard RGB PNG output for maximum compatibility
+    final_image = canvas.convert("RGB")
+    final_image.save(out, format="PNG", compress_level=0)
 
-    out.seek(0)
+    png_bytes = out.getvalue()
 
-    return send_file(out, mimetype="image/png")
+    return Response(
+        png_bytes,
+        mimetype="image/png",
+        headers={
+            "Content-Disposition": 'attachment; filename="qr-code.png"',
+            "Content-Type": "image/png",
+            "Content-Length": str(len(png_bytes)),
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 if __name__ == "__main__":
