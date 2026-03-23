@@ -6,24 +6,94 @@ import segno
 
 app = Flask(__name__)
 
+# Limit uploads to 5MB
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
 HTML = """
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
 <title>QR Generator</title>
+<style>
+body { font-family: Arial; padding: 30px; }
+#dropzone {
+    width: 300px;
+    height: 200px;
+    border: 2px dashed #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+#dropzone.hover {
+    border-color: #000;
+}
+img {
+    max-width: 300px;
+    margin-top: 10px;
+}
+</style>
 </head>
 <body>
+
 <h1>QR Generator</h1>
-<form action="/generate" method="get">
-  <label>QR Data</label><br>
-  <input type="text" name="data" required><br><br>
 
-  <label>Artwork URL (optional)</label><br>
-  <input type="text" name="art"><br><br>
+<form action="/generate" method="post" enctype="multipart/form-data">
 
-  <button type="submit">Generate</button>
+<label>QR Data</label><br>
+<input type="text" name="data" required style="width:300px;"><br><br>
+
+<label>Upload Artwork (optional)</label><br>
+
+<div id="dropzone">Drop Image Here or Click</div>
+<input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
+
+<img id="preview" />
+
+<br><br>
+
+<label>Or Artwork URL (optional)</label><br>
+<input type="text" name="arturl" style="width:300px;"><br><br>
+
+<button type="submit">Generate</button>
+
 </form>
+
+<script>
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("artfile");
+const preview = document.getElementById("preview");
+
+dropzone.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+    const file = fileInput.files[0];
+    if (file) preview.src = URL.createObjectURL(file);
+};
+
+dropzone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropzone.classList.add("hover");
+});
+
+dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("hover");
+});
+
+dropzone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropzone.classList.remove("hover");
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+        fileInput.files = e.dataTransfer.files;
+        preview.src = URL.createObjectURL(file);
+    }
+});
+</script>
+
 </body>
 </html>
 """
@@ -35,25 +105,11 @@ QUIET = 6
 DOT_SCALE = 0.48
 WHITE_SCALE_FACTOR = 0.88
 
-WASH = 0.20
-BUDGET = 0.08
-
 
 def fetch_image(url):
     r = requests.get(url, timeout=15)
     r.raise_for_status()
     return Image.open(BytesIO(r.content)).convert("RGBA")
-
-
-def luminance_rgba(px):
-    r, g, b, a = px
-    if a == 0:
-        return 255.0
-    alpha = a / 255.0
-    r = r * alpha + 255 * (1 - alpha)
-    g = g * alpha + 255 * (1 - alpha)
-    b = b * alpha + 255 * (1 - alpha)
-    return 0.299 * r + 0.587 * g + 0.114 * b
 
 
 def qr_size_from_version(version):
@@ -131,32 +187,16 @@ def matrix_from_segno(qr):
     return [[bool(v) for v in row] for row in qr.matrix]
 
 
-def score_mask(matrix, luma, version):
-    n = len(matrix)
-    s = 0.0
-    count = 0
-    for r in range(n):
-        for c in range(n):
-            if is_protected(r, c, n, version):
-                continue
-            y = luma[r][c]
-            if matrix[r][c]:
-                s += (255.0 - y)
-            else:
-                s += 0.35 * y
-            count += 1
-    return s / max(1, count)
-
-
 @app.route("/")
 def home():
     return Response(HTML, mimetype="text/html")
 
 
-@app.route("/generate")
+@app.route("/generate", methods=["POST"])
 def generate():
-    data = (request.args.get("data") or "").strip()
-    art_url = (request.args.get("art") or "").strip()
+    data = (request.form.get("data") or "").strip()
+    art_url = (request.form.get("arturl") or "").strip()
+    art_file = request.files.get("artfile")
 
     if not data:
         return "Missing data", 400
@@ -170,14 +210,26 @@ def generate():
     canvas = Image.new("RGBA", (size, size), (255, 255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    # ORIGINAL WORKING CENTERING LOGIC
-    if art_url:
+    art = None
+
+    # PRIORITY: Uploaded file first
+    if art_file and art_file.filename != "":
+        try:
+            art = Image.open(art_file.stream).convert("RGBA")
+        except:
+            art = None
+
+    # FALLBACK: URL
+    elif art_url:
         try:
             art = fetch_image(art_url)
-            art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
-            canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
         except:
-            pass
+            art = None
+
+    # APPLY ART
+    if art:
+        art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
+        canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
 
     def draw_dot(x0, y0, x1, y1, scale, color):
         pad = (1 - scale) * BOX / 2
@@ -191,10 +243,7 @@ def generate():
             y1 = y0 + BOX
 
             if is_protected(r, c, n, version):
-                if matrix[r][c]:
-                    draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0))
-                else:
-                    draw.rectangle([x0, y0, x1, y1], fill=(255, 255, 255))
+                draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0) if matrix[r][c] else (255, 255, 255))
                 continue
 
             if matrix[r][c]:
@@ -213,6 +262,7 @@ def generate():
     out = BytesIO()
     canvas.convert("RGB").save(out, format="PNG", optimize=True)
     out.seek(0)
+
     return send_file(out, mimetype="image/png")
 
 
