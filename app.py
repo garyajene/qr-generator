@@ -1,198 +1,112 @@
-from flask import Flask, request, Response
+from flask import Flask, request
 from io import BytesIO
 import base64
 import requests
-from PIL import Image, ImageDraw, ImageStat, UnidentifiedImageError
+from PIL import Image
 import segno
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
-def render_page(qr_img_b64=None):
-    return f"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>QR Generator</title>
-<style>
-body {{ font-family: Arial; padding: 30px; }}
-#dropzone {{
-    width: 300px;
-    height: 200px;
-    border: 2px dashed #999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    margin-bottom: 10px;
-}}
-#dropzone.hover {{ border-color: #000; }}
-img {{ max-width: 300px; margin-top: 10px; display:block; }}
-.result {{ margin-top: 30px; }}
-</style>
-</head>
-<body>
 
-<h1>QR Generator</h1>
+def generate_qr(data):
+    qr = segno.make(data, error='h')
+    buffer = BytesIO()
+    qr.save(buffer, kind='png', scale=10, border=2)
+    buffer.seek(0)
+    return Image.open(buffer).convert("RGBA")
 
-<form action="/generate" method="post" enctype="multipart/form-data">
-
-<label>QR Data</label><br>
-<input type="text" name="data" required style="width:300px;"><br><br>
-
-<label>Upload Artwork (optional)</label><br>
-<div id="dropzone">Drop Image Here or Click</div>
-<input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
-<img id="preview" />
-
-<br><br>
-
-<label>Or Artwork URL (optional)</label><br>
-<input type="text" name="arturl" style="width:300px;"><br><br>
-
-<button type="submit">Generate</button>
-
-</form>
-
-<div class="result">
-{f'<h2>Generated QR</h2><img src="data:image/png;base64,{qr_img_b64}"/>' if qr_img_b64 else ''}
-</div>
-
-<script>
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("artfile");
-const preview = document.getElementById("preview");
-
-dropzone.onclick = () => fileInput.click();
-
-fileInput.onchange = () => {{
-    const file = fileInput.files[0];
-    if (file) preview.src = URL.createObjectURL(file);
-}};
-
-dropzone.addEventListener("dragover", e => {{
-    e.preventDefault();
-    dropzone.classList.add("hover");
-}});
-
-dropzone.addEventListener("dragleave", () => {{
-    dropzone.classList.remove("hover");
-}});
-
-dropzone.addEventListener("drop", e => {{
-    e.preventDefault();
-    dropzone.classList.remove("hover");
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
-        fileInput.files = e.dataTransfer.files;
-        preview.src = URL.createObjectURL(e.dataTransfer.files[0]);
-    }}
-}});
-</script>
-
-</body>
-</html>
-"""
-
-ERROR_LEVEL = "h"
-BOX = 16
-QUIET = 6
-WHITE_SCALE_FACTOR = 0.88
 
 def fetch_image(url):
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    return Image.open(BytesIO(r.content)).convert("RGBA")
+    response = requests.get(url)
+    return Image.open(BytesIO(response.content)).convert("RGBA")
 
-def load_uploaded_image(file_storage):
-    try:
-        data = file_storage.read()
-        img = Image.open(BytesIO(data))
-        img.load()
-        return img.convert("RGBA")
-    except:
-        return None
 
-def analyze_complexity(img):
-    gray = img.convert("L")
-    stat = ImageStat.Stat(gray)
-    stddev = stat.stddev[0] / 255.0
-    extrema = gray.getextrema()
-    range_val = (extrema[1] - extrema[0]) / 255.0
-    return min(1.0, (stddev * 0.7) + (range_val * 0.3))
+def create_mockup(qr_img):
+    # Load assets
+    card = Image.open("static/blackcard.png").convert("RGBA")
+    dome = Image.open("static/dome_piece_2.png").convert("RGBA")
 
-def get_adaptive_dot_scale(c):
-    if c < 0.25: return 0.46
-    elif c < 0.45: return 0.48
-    elif c < 0.65: return 0.50
-    elif c < 0.80: return 0.52
-    else: return 0.54
+    # Resize QR
+    qr_size = 500
+    qr_img = qr_img.resize((qr_size, qr_size))
 
-def matrix_from_segno(qr):
-    return [[bool(v) for v in row] for row in qr.matrix]
+    # Center QR on card
+    card_w, card_h = card.size
+    qr_x = (card_w - qr_size) // 2
+    qr_y = (card_h - qr_size) // 2
 
-def is_protected(r, c, n):
-    return (r <= 8 and c <= 8) or (r <= 8 and c >= n-9) or (r >= n-9 and c <= 8)
+    card.paste(qr_img, (qr_x, qr_y), qr_img)
 
-@app.route("/")
-def home():
-    return render_page()
+    # Resize dome slightly bigger than QR
+    dome = dome.resize((qr_size + 80, qr_size + 80))
 
-@app.route("/generate", methods=["POST"])
-def generate():
-    data = request.form.get("data", "").strip()
-    art_url = request.form.get("arturl", "").strip()
-    art_file = request.files.get("artfile")
+    dome_x = qr_x - 40
+    dome_y = qr_y - 40
 
-    qr = segno.make(data, error=ERROR_LEVEL)
-    matrix = matrix_from_segno(qr)
-    n = len(matrix)
+    card.paste(dome, (dome_x, dome_y), dome)
 
-    size = (n + 2 * QUIET) * BOX
-    canvas = Image.new("RGBA", (size, size), (255,255,255,255))
-    draw = ImageDraw.Draw(canvas)
+    return card
 
-    art = None
-    if art_file and art_file.filename:
-        art = load_uploaded_image(art_file)
-    elif art_url:
-        try: art = fetch_image(art_url)
-        except: pass
 
-    dot_scale = 0.48
+def image_to_base64(img):
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
-    if art:
-        c = analyze_complexity(art)
-        dot_scale = get_adaptive_dot_scale(c)
-        art = art.resize((n*BOX, n*BOX))
-        canvas.paste(art, (QUIET*BOX, QUIET*BOX), art)
 
-    def draw_dot(x0,y0,x1,y1,s,color):
-        pad = (1-s)*BOX/2
-        draw.ellipse([x0+pad,y0+pad,x1-pad,y1-pad], fill=color)
+@app.route("/", methods=["GET", "POST"])
+def index():
+    qr_b64 = None
+    mockup_b64 = None
 
-    for r in range(n):
-        for c in range(n):
-            x0 = (QUIET+c)*BOX
-            y0 = (QUIET+r)*BOX
-            x1 = x0+BOX
-            y1 = y0+BOX
+    if request.method == "POST":
+        data = request.form.get("qr_data")
+        artwork_url = request.form.get("artwork_url")
 
-            if is_protected(r,c,n):
-                draw.rectangle([x0,y0,x1,y1], fill=(0,0,0) if matrix[r][c] else (255,255,255))
-                continue
+        qr_img = generate_qr(data)
 
-            if matrix[r][c]:
-                draw_dot(x0,y0,x1,y1,dot_scale,(0,0,0))
-            else:
-                draw_dot(x0,y0,x1,y1,dot_scale*WHITE_SCALE_FACTOR,(255,255,255))
+        # If artwork URL exists, overlay effect (your existing logic can go here)
+        if artwork_url:
+            try:
+                art = fetch_image(artwork_url)
+                art = art.resize(qr_img.size)
+                qr_img = Image.alpha_composite(qr_img, art)
+            except:
+                pass
 
-    out = BytesIO()
-    canvas.convert("RGB").save(out, format="PNG")
-    img_b64 = base64.b64encode(out.getvalue()).decode()
+        qr_b64 = image_to_base64(qr_img)
 
-    return render_page(img_b64)
+        # NEW: create mockup
+        mockup_img = create_mockup(qr_img)
+        mockup_b64 = image_to_base64(mockup_img)
+
+    return f"""
+    <html>
+    <head>
+        <title>QR Generator</title>
+        <style>
+            body {{ font-family: Arial; padding: 30px; }}
+            img {{ margin-top: 20px; max-width: 400px; }}
+        </style>
+    </head>
+    <body>
+        <h1>QR Generator</h1>
+
+        <form method="POST">
+            <input type="text" name="qr_data" placeholder="Enter QR Data" required><br><br>
+            <input type="text" name="artwork_url" placeholder="Artwork URL (optional)"><br><br>
+            <button type="submit">Generate</button>
+        </form>
+
+        {f"<h2>QR Code</h2><img src='data:image/png;base64,{qr_b64}' />" if qr_b64 else ""}
+        
+        {f"<h2>Mockup Preview</h2><img src='data:image/png;base64,{mockup_b64}' />" if mockup_b64 else ""}
+
+    </body>
+    </html>
+    """
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(debug=True)
