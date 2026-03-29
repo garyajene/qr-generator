@@ -1,7 +1,7 @@
-from flask import Flask, request, Response
+from flask import Flask, request
 from io import BytesIO
 import base64
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageDraw, ImageStat, ImageChops
 import segno
 
 app = Flask(__name__)
@@ -13,11 +13,10 @@ QUIET = 6
 WHITE_SCALE_FACTOR = 0.88
 
 
-def render_page(
-    qr_img_b64=None,
-    card_mockup_b64=None,
-    dome_mockup_b64=None,
-):
+# -----------------------------
+# PAGE RENDER
+# -----------------------------
+def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
     return f"""
 <!doctype html>
 <html>
@@ -33,6 +32,10 @@ body {{
 
 h1 {{
     margin-bottom: 30px;
+}}
+
+label {{
+    font-weight: bold;
 }}
 
 input[type="text"] {{
@@ -51,6 +54,7 @@ input[type="text"] {{
     cursor: pointer;
     margin-top: 10px;
     background: #fff;
+    text-align: center;
 }}
 
 #dropzone.hover {{
@@ -78,8 +82,8 @@ button {{
     margin-top: 30px;
 }}
 
-.result-block img {{
-    max-width: 520px;
+.generated-qr {{
+    max-width: 340px;
     height: auto;
     display: block;
     margin-top: 12px;
@@ -91,6 +95,22 @@ button {{
     gap: 40px;
     flex-wrap: wrap;
     align-items: flex-start;
+}}
+
+.mockup-card {{
+    max-width: 520px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+    background: #fff;
+}}
+
+.mockup-dome {{
+    max-width: 300px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+    background: transparent;
 }}
 
 .label {{
@@ -122,7 +142,7 @@ button {{
     {f'''
     <div class="result-block">
         <h2>Generated QR</h2>
-        <img src="data:image/png;base64,{qr_img_b64}">
+        <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
     </div>
     ''' if qr_img_b64 else ''}
 
@@ -131,12 +151,12 @@ button {{
         <h2>Mockups</h2>
         <div class="mockups">
             <div>
-                <div class="label">Business Card Mockup</div>
-                <img src="data:image/png;base64,{card_mockup_b64}">
+                <div class="label">Business Card</div>
+                <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
             </div>
             <div>
-                <div class="label">Dome Sticker Mockup</div>
-                <img src="data:image/png;base64,{dome_mockup_b64}">
+                <div class="label">Dome Sticker</div>
+                <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
             </div>
         </div>
     </div>
@@ -188,6 +208,9 @@ dropzone.addEventListener("drop", e => {{
 """
 
 
+# -----------------------------
+# HELPERS
+# -----------------------------
 def image_to_base64(img):
     out = BytesIO()
     img.save(out, format="PNG")
@@ -231,6 +254,9 @@ def get_adaptive_dot_scale(complexity):
         return 0.54
 
 
+# -----------------------------
+# QR STRUCTURE LOGIC
+# -----------------------------
 def qr_size_from_version(version):
     return 17 + 4 * version
 
@@ -292,6 +318,9 @@ def matrix_from_segno(qr):
     return [[bool(v) for v in row] for row in qr.matrix]
 
 
+# -----------------------------
+# BRANDED QR GENERATION
+# -----------------------------
 def generate_branded_qr(data, art=None):
     qr = segno.make(data, error=ERROR_LEVEL)
     matrix = matrix_from_segno(qr)
@@ -307,7 +336,6 @@ def generate_branded_qr(data, art=None):
     if art:
         complexity = analyze_complexity(art)
         dot_scale = get_adaptive_dot_scale(complexity)
-
         art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
         canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
 
@@ -344,23 +372,49 @@ def generate_branded_qr(data, art=None):
     return canvas.convert("RGBA")
 
 
-def crop_qr_for_card(qr_img):
-    # Removes some of the extra white around the QR while keeping it clean.
-    bbox = qr_img.getbbox()
+# -----------------------------
+# MOCKUP CROPPING / TRIMMING
+# -----------------------------
+def trim_qr_for_mockup(img):
+    rgb = img.convert("RGB")
+    bg = Image.new("RGB", rgb.size, (255, 255, 255))
+    diff = ImageChops.difference(rgb, bg)
+    bbox = diff.getbbox()
     if not bbox:
-        return qr_img
-    cropped = qr_img.crop(bbox)
-    return cropped
+        return img
+
+    left, top, right, bottom = bbox
+
+    white_left = left
+    white_top = top
+    white_right = img.width - right
+    white_bottom = img.height - bottom
+
+    # keep about half the white border for mockups only
+    keep_left = max(0, white_left // 2)
+    keep_top = max(0, white_top // 2)
+    keep_right = max(0, white_right // 2)
+    keep_bottom = max(0, white_bottom // 2)
+
+    crop_box = (
+        max(0, left - keep_left),
+        max(0, top - keep_top),
+        min(img.width, right + keep_right),
+        min(img.height, bottom + keep_bottom),
+    )
+    return img.crop(crop_box)
 
 
+# -----------------------------
+# MOCKUPS
+# -----------------------------
 def create_card_mockup(qr_img):
     card = Image.open("static/blackcard.png").convert("RGBA")
-    qr_crop = crop_qr_for_card(qr_img)
+    qr_crop = trim_qr_for_mockup(qr_img)
 
     card_w, card_h = card.size
 
-    # Put the QR on the bottom-right like your mockup reference.
-    qr_target_w = int(card_w * 0.23)
+    qr_target_w = int(card_w * 0.27)
     qr_target_h = qr_target_w
     qr_small = qr_crop.resize((qr_target_w, qr_target_h), Image.LANCZOS)
 
@@ -378,22 +432,34 @@ def create_dome_mockup(qr_img):
     dome = Image.open("static/dome_piece1.png").convert("RGBA")
     dome_w, dome_h = dome.size
 
-    qr_crop = crop_qr_for_card(qr_img)
+    qr_crop = trim_qr_for_mockup(qr_img)
 
-    # Build the QR inside the dome as a separate round sticker mockup.
-    qr_target = int(min(dome_w, dome_h) * 0.72)
+    qr_target = int(min(dome_w, dome_h) * 0.54)
     qr_small = qr_crop.resize((qr_target, qr_target), Image.LANCZOS)
+
+    # slight zoom/crop feeling
+    zoom = 1.18
+    zoomed_w = int(qr_small.width * zoom)
+    zoomed_h = int(qr_small.height * zoom)
+    qr_small = qr_small.resize((zoomed_w, zoomed_h), Image.LANCZOS)
 
     base = Image.new("RGBA", dome.size, (255, 255, 255, 0))
 
-    qr_x = (dome_w - qr_target) // 2
-    qr_y = (dome_h - qr_target) // 2
+    qr_x = (dome_w - qr_small.width) // 2
+    qr_y = (dome_h - qr_small.height) // 2
 
     base.paste(qr_small, (qr_x, qr_y), qr_small)
     base.alpha_composite(dome, (0, 0))
-    return base
+
+    # make the displayed dome mockup more realistic in relative size
+    final_w = int(dome_w * 0.68)
+    final_h = int(dome_h * 0.68)
+    return base.resize((final_w, final_h), Image.LANCZOS)
 
 
+# -----------------------------
+# ROUTE
+# -----------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     qr_b64 = None
