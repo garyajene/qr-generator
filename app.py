@@ -1,7 +1,7 @@
-from flask import Flask, request, Response
+from flask import Flask, request
 from io import BytesIO
 import base64
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageChops
 import segno
 
 app = Flask(__name__)
@@ -42,18 +42,20 @@ def load_asset(path):
 # CREATE MOCKUPS
 # -----------------------------
 def create_mockups(qr_img):
-    # Trim white for mockups
-    qr_trimmed = ImageOps.crop(qr_img, border=40)
+    qr_trimmed = trim_qr(qr_img)
 
     # ---------- CARD ----------
     card = load_asset("static/blackcard.png")
     card_w, card_h = card.size
 
     qr_card = qr_trimmed.copy()
-    qr_card.thumbnail((card_w * 0.25, card_h * 0.25))
+    qr_card.thumbnail((int(card_w * 0.32), int(card_h * 0.32)))
 
-    card_x = int(card_w * 0.70)
-    card_y = int(card_h * 0.65)
+    margin_x = int(card_w * 0.06)
+    margin_y = int(card_h * 0.08)
+
+    card_x = card_w - qr_card.width - margin_x
+    card_y = card_h - qr_card.height - margin_y
 
     card.paste(qr_card, (card_x, card_y), qr_card)
 
@@ -63,13 +65,12 @@ def create_mockups(qr_img):
 
     qr_dome = qr_trimmed.copy()
 
-    # Slight zoom for better fill
     zoom_factor = 1.4
     qr_dome = qr_dome.resize(
         (int(qr_dome.width * zoom_factor), int(qr_dome.height * zoom_factor))
     )
 
-    qr_dome.thumbnail((dome_w * 0.7, dome_h * 0.7))
+    qr_dome.thumbnail((int(dome_w * 0.65), int(dome_h * 0.65)))
 
     dome_base = Image.new("RGBA", dome.size, (0, 0, 0, 0))
 
@@ -106,7 +107,6 @@ def index():
         if data:
             qr_img = generate_qr(data)
 
-            # Optional artwork overlay
             file = request.files.get("file")
             if file:
                 try:
@@ -143,7 +143,7 @@ def index():
                 margin-top: 10px;
             }}
 
-            img {{ max-width: 300px; margin-top: 20px; }}
+            img {{ max-width: 320px; margin-top: 20px; }}
 
             .mockups {{
                 display: flex;
@@ -158,7 +158,7 @@ def index():
 
         <form method="POST" enctype="multipart/form-data">
             <label>QR Data</label><br>
-            <input name="qr_data" placeholder="Enter QR Data"><br><br>
+            <input name="qr_data" placeholder="Enter QR Data" required><br><br>
 
             <label>Upload Artwork (optional)</label>
             <div class="drop-zone" id="dropZone">
