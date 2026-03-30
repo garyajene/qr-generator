@@ -2,8 +2,9 @@ from flask import Flask, request
 from io import BytesIO
 import base64
 from collections import Counter
-from PIL import Image, ImageDraw
+from PIL import Image
 import segno
+import os
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -22,10 +23,7 @@ def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
 <meta charset="utf-8" />
 <title>QR Generator</title>
 <style>
-body {{
-    font-family: Arial;
-    padding: 30px;
-}}
+body {{ font-family: Arial; padding: 30px; }}
 
 #dropzone {{
     width: 400px;
@@ -37,9 +35,7 @@ body {{
     cursor: pointer;
 }}
 
-img {{
-    margin-top: 20px;
-}}
+img {{ margin-top: 20px; }}
 </style>
 </head>
 <body>
@@ -50,7 +46,7 @@ img {{
 <input name="data" placeholder="Enter QR Data" required><br><br>
 
 <div id="dropzone">Drop Image Here or Click</div>
-<input type="file" id="file" name="artfile" style="display:none">
+<input type="file" id="file" name="artfile" accept="image/*" style="display:none">
 
 <br><br>
 <button type="submit">Generate</button>
@@ -94,7 +90,7 @@ def image_to_base64(img):
 
 
 def fetch_uploaded_image(f):
-    if not f:
+    if not f or f.filename == "":
         return None
     try:
         return Image.open(BytesIO(f.read())).convert("RGBA")
@@ -102,7 +98,7 @@ def fetch_uploaded_image(f):
         return None
 
 
-# ---------- SAFE COLOR SAMPLING ----------
+# ---------- SAFE COLOR ----------
 def safe_bg_color(img):
     try:
         if not img:
@@ -111,25 +107,12 @@ def safe_bg_color(img):
         small = img.resize((100, 100))
         pixels = list(small.getdata())
 
-        colors = []
-        for r, g, b, a in pixels:
-            if a > 0:
-                colors.append((r, g, b))
+        colors = [(r, g, b) for r, g, b, a in pixels if a > 0]
 
         if not colors:
             return (255, 255, 255)
 
-        most_common = Counter(colors).most_common(1)[0][0]
-
-        # FINAL SAFETY CHECK
-        if (
-            isinstance(most_common, tuple)
-            and len(most_common) == 3
-            and all(isinstance(v, int) for v in most_common)
-        ):
-            return most_common
-
-        return (255, 255, 255)
+        return Counter(colors).most_common(1)[0][0]
 
     except:
         return (255, 255, 255)
@@ -161,41 +144,38 @@ def trim_qr(img):
 
 # ---------- MOCKUPS ----------
 def create_card_mockup(qr):
-    card = Image.open("static/blackcard.png").convert("RGBA")
+    path = "static/blackcard.png"
+    if not os.path.exists(path):
+        return None
+
+    card = Image.open(path).convert("RGBA")
     qr = trim_qr(qr)
 
     w, h = card.size
-    size = int(w * 0.38)  # slightly larger
+    size = int(w * 0.38)
 
     qr = qr.resize((size, size))
+    card.paste(qr, (w - size - 20, h - size - 20), qr)
 
-    x = w - size - 20
-    y = h - size - 20
-
-    card.paste(qr, (x, y), qr)
     return card
 
 
 def create_dome_mockup(qr, bg_color):
-    dome = Image.open("static/dome_piece1.png").convert("RGBA")
+    path = "static/dome_piece1.png"
+    if not os.path.exists(path):
+        return None
+
+    dome = Image.open(path).convert("RGBA")
     qr = trim_qr(qr)
 
     dw, dh = dome.size
 
-    # SAFE background (NO CRASH POSSIBLE)
-    if not isinstance(bg_color, tuple) or len(bg_color) != 3:
-        bg_color = (255, 255, 255)
-
     base = Image.new("RGBA", (dw, dh), (*bg_color, 255))
 
-    size = int(dw * 0.42)  # slightly smaller dome content
+    size = int(dw * 0.42)
     qr = qr.resize((size, size))
 
-    x = (dw - size) // 2
-    y = (dh - size) // 2
-
-    base.paste(qr, (x, y), qr)
-
+    base.paste(qr, ((dw - size)//2, (dh - size)//2), qr)
     base.alpha_composite(dome)
 
     return base.resize((int(dw * 0.5), int(dh * 0.5)))
@@ -204,26 +184,32 @@ def create_dome_mockup(qr, bg_color):
 # ---------- ROUTE ----------
 @app.route("/", methods=["GET", "POST"])
 def home():
-    qr_b64 = None
-    card_b64 = None
-    dome_b64 = None
+    try:
+        qr_b64 = None
+        card_b64 = None
+        dome_b64 = None
 
-    if request.method == "POST":
-        data = request.form.get("data")
-        art = fetch_uploaded_image(request.files.get("artfile"))
+        if request.method == "POST":
+            data = request.form.get("data")
+            art = fetch_uploaded_image(request.files.get("artfile"))
 
-        if data:
-            qr, bg_color = generate_qr(data, art)
+            if data:
+                qr, bg_color = generate_qr(data, art)
 
-            qr_b64 = image_to_base64(qr)
+                qr_b64 = image_to_base64(qr)
 
-            card = create_card_mockup(qr)
-            dome = create_dome_mockup(qr, bg_color)
+                card = create_card_mockup(qr)
+                dome = create_dome_mockup(qr, bg_color)
 
-            card_b64 = image_to_base64(card)
-            dome_b64 = image_to_base64(dome)
+                if card:
+                    card_b64 = image_to_base64(card)
+                if dome:
+                    dome_b64 = image_to_base64(dome)
 
-    return render_page(qr_b64, card_b64, dome_b64)
+        return render_page(qr_b64, card_b64, dome_b64)
+
+    except Exception as e:
+        return f"<h1>ERROR</h1><pre>{str(e)}</pre>"
 
 
 # ---------- RUN ----------
