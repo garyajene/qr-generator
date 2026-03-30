@@ -1,6 +1,7 @@
 from flask import Flask, request
 from io import BytesIO
 import base64
+from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
 
@@ -10,7 +11,6 @@ app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 ERROR_LEVEL = "h"
 BOX = 16
 QUIET = 6
-WHITE_SCALE_FACTOR = 0.88
 
 
 def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
@@ -103,7 +103,7 @@ button {{
 }}
 
 .mockup-dome {{
-    max-width: 220px;
+    max-width: 200px;
     height: auto;
     display: block;
     margin-top: 12px;
@@ -223,14 +223,35 @@ def fetch_uploaded_image(file_storage):
         return None
 
 
-def average_region(img, cx, cy, radius=6):
-    x0 = max(0, cx - radius)
-    y0 = max(0, cy - radius)
-    x1 = min(img.width, cx + radius + 1)
-    y1 = min(img.height, cy + radius + 1)
-    region = img.crop((x0, y0, x1, y1)).convert("RGBA")
+def quantize_color(rgb, bucket=32):
+    return (
+        int(round(rgb[0] / bucket) * bucket),
+        int(round(rgb[1] / bucket) * bucket),
+        int(round(rgb[2] / bucket) * bucket),
+    )
 
+
+def color_distance(c1, c2):
+    return ((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2 + (c1[2] - c2[2]) ** 2) ** 0.5
+
+
+def is_near_white(rgb):
+    return rgb[0] >= 220 and rgb[1] >= 220 and rgb[2] >= 220
+
+
+def is_near_black(rgb):
+    return rgb[0] <= 35 and rgb[1] <= 35 and rgb[2] <= 35
+
+
+def sample_region_average(img, x, y, radius=6):
+    x0 = max(0, x - radius)
+    y0 = max(0, y - radius)
+    x1 = min(img.width, x + radius + 1)
+    y1 = min(img.height, y + radius + 1)
+
+    region = img.crop((x0, y0, x1, y1)).convert("RGBA")
     pixels = list(region.getdata())
+
     valid = []
     for r, g, b, a in pixels:
         if a > 0:
@@ -247,47 +268,83 @@ def average_region(img, cx, cy, radius=6):
     )
 
 
-def color_distance(c1, c2):
-    return ((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2 + (c1[2] - c2[2]) ** 2) ** 0.5
+def build_sample_points(width, height):
+    points = []
 
+    left_x = int(width * 0.12)
+    right_x = int(width * 0.88)
+    top_y = int(height * 0.12)
+    bottom_y = int(height * 0.88)
 
-def luminance(rgb):
-    r, g, b = rgb
-    return 0.299 * r + 0.587 * g + 0.114 * b
+    side_ys = [0.18, 0.34, 0.50, 0.66, 0.82]
+    side_xs = [0.18, 0.34, 0.50, 0.66, 0.82]
+
+    for ry in side_ys:
+        points.append((left_x, int(height * ry)))
+        points.append((right_x, int(height * ry)))
+
+    for rx in side_xs:
+        points.append((int(width * rx), top_y))
+        points.append((int(width * rx), bottom_y))
+
+    center_points = [
+        (0.35, 0.35),
+        (0.50, 0.35),
+        (0.65, 0.35),
+        (0.35, 0.50),
+        (0.50, 0.50),
+        (0.65, 0.50),
+        (0.42, 0.65),
+        (0.58, 0.65),
+    ]
+
+    for rx, ry in center_points:
+        points.append((int(width * rx), int(height * ry)))
+
+    return points
 
 
 def choose_background_color(art):
     if not art:
         return (255, 255, 255)
 
-    test = art.convert("RGBA").resize((240, 240), Image.LANCZOS)
+    test = art.convert("RGBA").resize((300, 300), Image.LANCZOS)
+    points = build_sample_points(test.width, test.height)
 
-    top_center = average_region(test, test.width // 2, int(test.height * 0.14))
-    mid_center = average_region(test, test.width // 2, int(test.height * 0.50))
+    sampled_colors = []
+    saw_white = False
+    saw_black = False
 
-    if color_distance(top_center, mid_center) > 70:
-        avg = (
-            (top_center[0] + mid_center[0]) // 2,
-            (top_center[1] + mid_center[1]) // 2,
-            (top_center[2] + mid_center[2]) // 2,
-        )
-        if luminance(avg) < 128:
+    for x, y in points:
+        rgb = sample_region_average(test, x, y, radius=7)
+        if is_near_white(rgb):
+            saw_white = True
+        if is_near_black(rgb):
+            saw_black = True
+        sampled_colors.append(quantize_color(rgb, bucket=32))
+
+    counts = Counter(sampled_colors)
+    most_common = counts.most_common()
+
+    if not most_common:
+        return (255, 255, 255)
+
+    if len(most_common) > 1 and most_common[0][1] == most_common[1][1]:
+        if saw_white:
+            return (255, 255, 255)
+        if saw_black:
             return (0, 0, 0)
         return (255, 255, 255)
 
-    return (
-        (top_center[0] + mid_center[0]) // 2,
-        (top_center[1] + mid_center[1]) // 2,
-        (top_center[2] + mid_center[2]) // 2,
-    )
+    winner = most_common[0][0]
+    winner = tuple(max(0, min(255, c)) for c in winner)
 
+    if is_near_white(winner):
+        return (255, 255, 255)
+    if is_near_black(winner):
+        return (0, 0, 0)
 
-def tinted_light_color(bg):
-    return (
-        int(255 * 0.88 + bg[0] * 0.12),
-        int(255 * 0.88 + bg[1] * 0.12),
-        int(255 * 0.88 + bg[2] * 0.12),
-    )
+    return winner
 
 
 def qr_size_from_version(version):
@@ -381,8 +438,8 @@ def generate_branded_qr(data, art=None):
     n = len(matrix)
 
     bg_color = choose_background_color(art)
-    light_color = tinted_light_color(bg_color)
     dark_color = (0, 0, 0)
+    light_color = (255, 255, 255)
 
     size = (n + 2 * QUIET) * BOX
     canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
@@ -417,7 +474,7 @@ def generate_branded_qr(data, art=None):
             if matrix[r][c]:
                 draw_dot(x0, y0, x1, y1, dot_scale, (*dark_color, 255))
             else:
-                white_scale = max(0.35, min(0.85, dot_scale * WHITE_SCALE_FACTOR))
+                white_scale = max(0.35, min(0.85, dot_scale * 0.88))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
     qpx = QUIET * BOX
