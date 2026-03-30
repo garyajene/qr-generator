@@ -117,6 +117,14 @@ def safe_bg_color(img):
         return (255, 255, 255)
 
 
+# ---------- SAFE PASTE ----------
+def safe_paste(base, overlay, pos):
+    if overlay.mode == "RGBA":
+        base.paste(overlay, pos, overlay)
+    else:
+        base.paste(overlay, pos)
+
+
 # ---------- QR ----------
 def generate_qr(data, art):
     qr = segno.make(data, error=ERROR_LEVEL)
@@ -130,11 +138,11 @@ def generate_qr(data, art):
     bg_color = safe_bg_color(art)
 
     img = Image.new("RGBA", qr_img.size, (*bg_color, 255))
-    img.paste(qr_img, (0, 0), qr_img)
+    safe_paste(img, qr_img, (0, 0))
 
     if art:
         art = art.resize(qr_img.size)
-        img.paste(art, (0, 0), art)
+        safe_paste(img, art, (0, 0))
 
     return img.convert("RGB"), bg_color
 
@@ -157,7 +165,7 @@ def create_card_mockup(qr):
     size = int(w * 0.38)
 
     qr = qr.resize((size, size))
-    card.paste(qr, (w - size - 20, h - size - 20), qr)
+    safe_paste(card, qr, (w - size - 20, h - size - 20))
 
     return card
 
@@ -172,15 +180,12 @@ def create_dome_mockup(qr, bg_color):
 
     dw, dh = dome.size
 
-    if not isinstance(bg_color, tuple) or len(bg_color) != 3:
-        bg_color = (255, 255, 255)
-
     base = Image.new("RGBA", (dw, dh), (*bg_color, 255))
 
     size = int(dw * 0.42)
     qr = qr.resize((size, size))
 
-    base.paste(qr, ((dw - size)//2, (dh - size)//2), qr)
+    safe_paste(base, qr, ((dw - size)//2, (dh - size)//2))
     base.alpha_composite(dome)
 
     return base.resize((int(dw * 0.5), int(dh * 0.5)))
