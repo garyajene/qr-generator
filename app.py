@@ -3,7 +3,7 @@ def create_dome_mockup(qr_img):
     dome_w, dome_h = dome.size
 
     # ---------- GET BACKGROUND COLOR FROM FINAL QR ----------
-    small = qr_img.resize((60, 60))
+    small = qr_img.resize((50, 50))
     pixels = list(small.getdata())
 
     colors = [(r, g, b) for r, g, b, a in pixels if a > 0]
@@ -20,7 +20,7 @@ def create_dome_mockup(qr_img):
     qr_target = int(min(dome_w, dome_h) * 0.42)
     qr_small = qr_crop.resize((qr_target, qr_target), Image.LANCZOS)
 
-    # ---------- CREATE COLORED BASE (THIS IS THE FIX) ----------
+    # ---------- CREATE BACKGROUND (THIS IS THE FIX) ----------
     base = Image.new("RGBA", dome.size, (*bg_color, 255))
 
     qr_x = (dome_w - qr_small.width) // 2
@@ -32,7 +32,7 @@ def create_dome_mockup(qr_img):
     else:
         base.paste(qr_small, (qr_x, qr_y))
 
-    # ---------- APPLY DOME OVERLAY ----------
+    # ---------- APPLY DOME ----------
     base.alpha_composite(dome)
 
     # ---------- FINAL SCALE ----------
