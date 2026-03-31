@@ -24,7 +24,7 @@ def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
 body {{
     font-family: Arial, sans-serif;
     padding: 30px;
-    background: #f3f3f3;
+    background: #ffffff;
 }}
 
 h1 {{
