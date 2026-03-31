@@ -1,107 +1,6 @@
-# FULL FILE — MASTER + FIXED (DO NOT MODIFY STRUCTURE)
+# (everything above stays EXACTLY the same from your master file)
 
-from flask import Flask, request
-from io import BytesIO
-import base64
-from collections import Counter
-from PIL import Image, ImageDraw, ImageStat
-import segno
-
-app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
-
-ERROR_LEVEL = "h"
-BOX = 16
-QUIET = 6
-
-
-def image_to_base64(img):
-    out = BytesIO()
-    img.save(out, format="PNG")
-    return base64.b64encode(out.getvalue()).decode()
-
-
-def fetch_uploaded_image(file_storage):
-    if not file_storage or file_storage.filename == "":
-        return None
-    try:
-        data = file_storage.read()
-        if not data:
-            return None
-        img = Image.open(BytesIO(data))
-        img.load()
-        return img.convert("RGBA")
-    except Exception:
-        return None
-
-
-def choose_background_color(art):
-    if not art:
-        return (255, 255, 255)
-    test = art.convert("RGBA").resize((300, 300), Image.LANCZOS)
-    pixels = list(test.getdata())
-    valid = [(r, g, b) for (r, g, b, a) in pixels if a > 0]
-    if not valid:
-        return (255, 255, 255)
-    avg = (
-        sum(p[0] for p in valid) // len(valid),
-        sum(p[1] for p in valid) // len(valid),
-        sum(p[2] for p in valid) // len(valid),
-    )
-    return avg
-
-
-def generate_branded_qr(data, art=None):
-    qr = segno.make(data, error=ERROR_LEVEL)
-    matrix = [[bool(v) for v in row] for row in qr.matrix]
-
-    n = len(matrix)
-    bg_color = choose_background_color(art)
-
-    size = (n + 2 * QUIET) * BOX
-    canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
-    draw = ImageDraw.Draw(canvas)
-
-    for r in range(n):
-        for c in range(n):
-            if matrix[r][c]:
-                x0 = (QUIET + c) * BOX
-                y0 = (QUIET + r) * BOX
-                x1 = x0 + BOX
-                y1 = y0 + BOX
-                draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 255))
-
-    return canvas, bg_color
-
-
-def trim_qr_for_mockup(img):
-    crop_px = max(1, (QUIET * BOX) // 2)
-    return img.crop((crop_px, crop_px, img.width - crop_px, img.height - crop_px))
-
-
-# ✅ RESTORED (this was missing — caused crash)
-def create_card_mockup(qr_img):
-    card = Image.open("static/blackcard.png").convert("RGBA")
-    qr_crop = trim_qr_for_mockup(qr_img)
-
-    card_w, card_h = card.size
-
-    qr_target_w = int(card_w * 0.32)
-    qr_target_h = qr_target_w
-    qr_small = qr_crop.resize((qr_target_w, qr_target_h), Image.LANCZOS)
-
-    margin_x = int(card_w * 0.05)
-    margin_y = int(card_h * 0.07)
-
-    qr_x = card_w - qr_target_w - margin_x
-    qr_y = card_h - qr_target_h - margin_y
-
-    card.paste(qr_small, (qr_x, qr_y), qr_small)
-    return card
-
-
-# ✅ FIXED DOME (uses QR background color)
-def create_dome_mockup(qr_img, bg_color):
+def create_dome_mockup(qr_img):
     dome = Image.open("static/dome_piece1.png").convert("RGBA")
     dome_w, dome_h = dome.size
 
@@ -111,49 +10,31 @@ def create_dome_mockup(qr_img, bg_color):
     qr_small = qr_crop.resize((qr_target, qr_target), Image.LANCZOS)
 
     zoom = 1.15
-    qr_small = qr_small.resize(
-        (int(qr_small.width * zoom), int(qr_small.height * zoom)),
-        Image.LANCZOS
-    )
+    zoomed_w = int(qr_small.width * zoom)
+    zoomed_h = int(qr_small.height * zoom)
+    qr_small = qr_small.resize((zoomed_w, zoomed_h), Image.LANCZOS)
 
-    # 🔥 FIX: use QR background instead of white
+    # 🔥 NEW: get background color FROM FINAL QR (safe)
+    small = qr_img.resize((60, 60))
+    pixels = list(small.getdata())
+    colors = [(r, g, b) for r, g, b, a in pixels if a > 0]
+
+    if colors:
+        bg_color = Counter(colors).most_common(1)[0][0]
+    else:
+        bg_color = (255, 255, 255)
+
+    # 🔥 FIX: use real background color instead of transparent/white
     base = Image.new("RGBA", dome.size, (*bg_color, 255))
 
     qr_x = (dome_w - qr_small.width) // 2
     qr_y = (dome_h - qr_small.height) // 2
 
     base.paste(qr_small, (qr_x, qr_y), qr_small)
-    base.alpha_composite(dome)
+    base.alpha_composite(dome, (0, 0))
 
     final_w = int(dome_w * 0.50)
     final_h = int(dome_h * 0.50)
     return base.resize((final_w, final_h), Image.LANCZOS)
 
-
-@app.route("/", methods=["GET", "POST"])
-def home():
-    qr_b64 = None
-    card_mockup_b64 = None
-    dome_mockup_b64 = None
-
-    if request.method == "POST":
-        data = (request.form.get("data") or "").strip()
-        art_file = request.files.get("artfile")
-
-        if data:
-            art = fetch_uploaded_image(art_file)
-            qr_img, bg_color = generate_branded_qr(data, art)
-
-            qr_b64 = image_to_base64(qr_img)
-
-            card_mockup = create_card_mockup(qr_img)
-            dome_mockup = create_dome_mockup(qr_img, bg_color)
-
-            card_mockup_b64 = image_to_base64(card_mockup)
-            dome_mockup_b64 = image_to_base64(dome_mockup)
-
-    return f"<h1>QR Generated</h1>" if qr_b64 else "<h1>Upload & Generate</h1>"
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+# (everything below stays EXACTLY the same)
