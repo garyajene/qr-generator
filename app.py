@@ -4,7 +4,6 @@ import base64
 from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
-import os
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -14,7 +13,6 @@ BOX = 16
 QUIET = 6
 
 
-# ---------- UI ----------
 def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
     return f"""
 <!doctype html>
@@ -24,22 +22,96 @@ def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
 <title>QR Generator</title>
 <style>
 body {{
-    font-family: Arial;
+    font-family: Arial, sans-serif;
     padding: 30px;
+    background: #f3f3f3;
+}}
+
+h1 {{
+    margin-bottom: 24px;
+}}
+
+.label {{
+    font-weight: bold;
+    margin-bottom: 8px;
+}}
+
+input[type="text"] {{
+    width: 360px;
+    padding: 10px;
+    font-size: 16px;
 }}
 
 #dropzone {{
-    width: 400px;
-    height: 200px;
+    width: 420px;
+    height: 220px;
     border: 2px dashed #999;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    margin-top: 10px;
+    background: #fff;
+    text-align: center;
 }}
 
-img {{
-    margin-top: 20px;
+#dropzone.hover {{
+    border-color: #000;
+}}
+
+#preview {{
+    max-width: 260px;
+    max-height: 180px;
+    display: none;
+}}
+
+button {{
+    margin-top: 16px;
+    padding: 10px 18px;
+    font-size: 16px;
+    cursor: pointer;
+}}
+
+.results {{
+    margin-top: 40px;
+}}
+
+.result-block {{
+    margin-top: 30px;
+}}
+
+.generated-qr {{
+    max-width: 360px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+    background: #fff;
+}}
+
+.mockups {{
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}}
+
+.mockup-card {{
+    max-width: 540px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+}}
+
+.mockup-dome {{
+    max-width: 200px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+}}
+
+.subhead {{
+    font-weight: bold;
+    margin-bottom: 8px;
 }}
 </style>
 </head>
@@ -47,40 +119,83 @@ img {{
 
 <h1>QR Generator</h1>
 
-<form method="POST" enctype="multipart/form-data">
-<input name="data" placeholder="Enter QR Data" required><br><br>
+<form action="/" method="post" enctype="multipart/form-data">
+    <div class="label">QR Data</div>
+    <input type="text" name="data" required placeholder="Enter QR Data"><br><br>
 
-<div id="dropzone">Drop Image Here or Click</div>
-<input type="file" id="file" name="artfile" accept="image/*" style="display:none">
+    <div class="label">Upload Artwork (optional)</div>
+    <div id="dropzone">
+        <span id="droptext">Drop Image Here or Click</span>
+        <img id="preview" />
+    </div>
+    <input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
 
-<br><br>
-<button type="submit">Generate</button>
+    <br>
+    <button type="submit">Generate</button>
 </form>
 
-{f'<h2>Generated QR</h2><img src="data:image/png;base64,{qr_img_b64}">' if qr_img_b64 else ''}
+<div class="results">
+    {f'''
+    <div class="result-block">
+        <h2>Generated QR</h2>
+        <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
+    </div>
+    ''' if qr_img_b64 else ''}
 
-{f'''
-<h2>Mockups</h2>
-<b>Business Card</b><br>
-<img src="data:image/png;base64,{card_mockup_b64}"><br><br>
-
-<b>Dome Sticker</b><br>
-<img src="data:image/png;base64,{dome_mockup_b64}">
-''' if card_mockup_b64 else ''}
+    {f'''
+    <div class="result-block">
+        <h2>Mockups</h2>
+        <div class="mockups">
+            <div>
+                <div class="subhead">Business Card</div>
+                <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
+            </div>
+            <div>
+                <div class="subhead">Dome Sticker</div>
+                <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
+            </div>
+        </div>
+    </div>
+    ''' if card_mockup_b64 and dome_mockup_b64 else ''}
+</div>
 
 <script>
-const dz = document.getElementById("dropzone");
-const file = document.getElementById("file");
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("artfile");
+const preview = document.getElementById("preview");
+const droptext = document.getElementById("droptext");
 
-dz.onclick = () => file.click();
-dz.ondragover = e => e.preventDefault();
+dropzone.onclick = () => fileInput.click();
 
-dz.ondrop = e => {{
-    e.preventDefault();
-    const dt = new DataTransfer();
-    dt.items.add(e.dataTransfer.files[0]);
-    file.files = dt.files;
+fileInput.onchange = () => {{
+    const file = fileInput.files[0];
+    if (file) {{
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+        droptext.style.display = "none";
+    }}
 }};
+
+dropzone.addEventListener("dragover", e => {{
+    e.preventDefault();
+    dropzone.classList.add("hover");
+}});
+
+dropzone.addEventListener("dragleave", () => {{
+    dropzone.classList.remove("hover");
+}});
+
+dropzone.addEventListener("drop", e => {{
+    e.preventDefault();
+    dropzone.classList.remove("hover");
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
+        fileInput.files = e.dataTransfer.files;
+        const file = e.dataTransfer.files[0];
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+        droptext.style.display = "none";
+    }}
+}});
 </script>
 
 </body>
@@ -88,145 +203,135 @@ dz.ondrop = e => {{
 """
 
 
-# ---------- HELPERS ----------
 def image_to_base64(img):
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+    out = BytesIO()
+    img.save(out, format="PNG")
+    return base64.b64encode(out.getvalue()).decode()
 
 
-def fetch_uploaded_image(f):
-    if not f or f.filename == "":
+def fetch_uploaded_image(file_storage):
+    if not file_storage or file_storage.filename == "":
         return None
     try:
-        return Image.open(BytesIO(f.read())).convert("RGBA")
-    except:
+        data = file_storage.read()
+        if not data:
+            return None
+        img = Image.open(BytesIO(data))
+        img.load()
+        return img.convert("RGBA")
+    except Exception:
         return None
 
 
-def safe_bg_color(img):
-    try:
-        if not img:
-            return (255, 255, 255)
+def quantize_color(rgb, bucket=32):
+    return (
+        int(round(rgb[0] / bucket) * bucket),
+        int(round(rgb[1] / bucket) * bucket),
+        int(round(rgb[2] / bucket) * bucket),
+    )
 
-        small = img.resize((100, 100))
-        pixels = list(small.getdata())
 
-        colors = [(r, g, b) for r, g, b, a in pixels if a > 0]
+def is_near_white(rgb):
+    return rgb[0] >= 220 and rgb[1] >= 220 and rgb[2] >= 220
 
-        if not colors:
-            return (255, 255, 255)
 
-        return Counter(colors).most_common(1)[0][0]
+def is_near_black(rgb):
+    return rgb[0] <= 35 and rgb[1] <= 35 and rgb[2] <= 35
 
-    except:
+
+def choose_background_color(art):
+    if not art:
         return (255, 255, 255)
 
+    test = art.convert("RGBA").resize((300, 300), Image.LANCZOS)
+    pixels = list(test.getdata())
 
-# ---------- QR ----------
-def generate_qr(data, art):
+    valid = [(r, g, b) for (r, g, b, a) in pixels if a > 0]
+
+    if not valid:
+        return (255, 255, 255)
+
+    avg = (
+        sum(p[0] for p in valid) // len(valid),
+        sum(p[1] for p in valid) // len(valid),
+        sum(p[2] for p in valid) // len(valid),
+    )
+
+    if is_near_white(avg):
+        return (255, 255, 255)
+    if is_near_black(avg):
+        return (0, 0, 0)
+
+    return avg
+
+
+def generate_branded_qr(data, art=None):
     qr = segno.make(data, error=ERROR_LEVEL)
+    matrix = [[bool(v) for v in row] for row in qr.matrix]
 
-    buffer = BytesIO()
-    qr.save(buffer, kind="png", scale=BOX, border=QUIET)
-    buffer.seek(0)
+    n = len(matrix)
+    bg_color = choose_background_color(art)
 
-    qr_img = Image.open(buffer).convert("RGBA")
+    size = (n + 2 * QUIET) * BOX
+    canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
+    draw = ImageDraw.Draw(canvas)
 
-    bg_color = safe_bg_color(art)
+    for r in range(n):
+        for c in range(n):
+            if matrix[r][c]:
+                x0 = (QUIET + c) * BOX
+                y0 = (QUIET + r) * BOX
+                x1 = x0 + BOX
+                y1 = y0 + BOX
+                draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 255))
 
-    img = Image.new("RGBA", qr_img.size, (*bg_color, 255))
-    img.paste(qr_img, (0, 0), qr_img)
-
-    if art:
-        art = art.resize(qr_img.size)
-        img.paste(art, (0, 0), art)
-
-    return img.convert("RGBA")
-
-
-def trim_qr(img):
-    crop = (QUIET * BOX) // 2
-    return img.crop((crop, crop, img.width - crop, img.height - crop))
+    return canvas, bg_color
 
 
-# ---------- MOCKUPS ----------
-def create_card_mockup(qr):
-    path = "static/blackcard.png"
-    if not os.path.exists(path):
-        return None
+def create_dome_mockup(qr_img, bg_color):
+    dome = Image.open("static/dome_piece1.png").convert("RGBA")
 
-    card = Image.open(path).convert("RGBA")
-    qr = trim_qr(qr)
+    base = Image.new("RGBA", dome.size, (*bg_color, 255))
 
-    w, h = card.size
-    size = int(w * 0.38)
+    qr_small = qr_img.resize((int(dome.width * 0.5), int(dome.height * 0.5)), Image.LANCZOS)
 
-    qr = qr.resize((size, size))
-    card.paste(qr, (w - size - 20, h - size - 20), qr)
+    x = (dome.width - qr_small.width) // 2
+    y = (dome.height - qr_small.height) // 2
 
-    return card
-
-
-# 🔥 ONLY CHANGE: DOME FIX
-def create_dome_mockup(qr):
-    path = "static/dome_piece1.png"
-    if not os.path.exists(path):
-        return None
-
-    dome = Image.open(path).convert("RGBA")
-    qr = trim_qr(qr)
-
-    # get background color from FINAL QR
-    small = qr.resize((60, 60))
-    pixels = list(small.getdata())
-    colors = [(r, g, b) for r, g, b, a in pixels if a > 0]
-
-    if colors:
-        bg_color = Counter(colors).most_common(1)[0][0]
-    else:
-        bg_color = (255, 255, 255)
-
-    dw, dh = dome.size
-
-    base = Image.new("RGBA", (dw, dh), (*bg_color, 255))
-
-    size = int(dw * 0.42)
-    qr = qr.resize((size, size))
-
-    base.paste(qr, ((dw - size)//2, (dh - size)//2), qr)
+    base.paste(qr_small, (x, y), qr_small)
     base.alpha_composite(dome)
 
-    return base.resize((int(dw * 0.5), int(dh * 0.5)))
+    return base
 
 
-# ---------- ROUTE ----------
 @app.route("/", methods=["GET", "POST"])
 def home():
     qr_b64 = None
-    card_b64 = None
-    dome_b64 = None
+    card_mockup_b64 = None
+    dome_mockup_b64 = None
 
     if request.method == "POST":
-        data = request.form.get("data")
-        art = fetch_uploaded_image(request.files.get("artfile"))
+        data = (request.form.get("data") or "").strip()
+        art_file = request.files.get("artfile")
 
         if data:
-            qr = generate_qr(data, art)
+            art = fetch_uploaded_image(art_file)
+            qr_img, bg_color = generate_branded_qr(data, art)
 
-            qr_b64 = image_to_base64(qr)
+            qr_b64 = image_to_base64(qr_img)
 
-            card = create_card_mockup(qr)
-            dome = create_dome_mockup(qr)
+            card_mockup = create_card_mockup(qr_img)
+            dome_mockup = create_dome_mockup(qr_img, bg_color)
 
-            if card:
-                card_b64 = image_to_base64(card)
-            if dome:
-                dome_b64 = image_to_base64(dome)
+            card_mockup_b64 = image_to_base64(card_mockup)
+            dome_mockup_b64 = image_to_base64(dome_mockup)
 
-    return render_page(qr_b64, card_b64, dome_b64)
+    return render_page(
+        qr_img_b64=qr_b64,
+        card_mockup_b64=card_mockup_b64,
+        dome_mockup_b64=dome_mockup_b64,
+    )
 
 
-# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
