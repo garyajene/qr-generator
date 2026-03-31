@@ -512,7 +512,7 @@ def create_card_mockup(qr_img):
 
 
 def create_dome_mockup(qr_img):
-    dome = Image.open("static/dome_piece1.png").convert("RGBA")
+    dome = Image.open("static/dome_mask.png").convert("RGBA")
     dome_w, dome_h = dome.size
 
     qr_crop = trim_qr_for_mockup(qr_img)
