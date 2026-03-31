@@ -211,7 +211,7 @@ def fetch_uploaded_image(file_storage):
 
 
 # =========================
-# ALL YOUR QR LOGIC BELOW — UNCHANGED
+# ORIGINAL QR SYSTEM (UNCHANGED)
 # =========================
 
 def quantize_color(rgb, bucket=32):
@@ -309,8 +309,60 @@ def choose_background_color(art):
     return most_common[0][0]
 
 
+def generate_branded_qr(data, art=None):
+    qr = segno.make(data, error=ERROR_LEVEL)
+    matrix = [[bool(v) for v in row] for row in qr.matrix]
+    version = int(qr.version)
+    n = len(matrix)
+
+    bg_color = choose_background_color(art)
+    size = (n + 2 * QUIET) * BOX
+
+    canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    if art:
+        art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
+        canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
+
+    for r in range(n):
+        for c in range(n):
+            if matrix[r][c]:
+                x0 = (QUIET + c) * BOX
+                y0 = (QUIET + r) * BOX
+                x1 = x0 + BOX
+                y1 = y0 + BOX
+                draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 255))
+
+    return canvas.convert("RGBA")
+
+
 # =========================
-# 🔥 ONLY CHANGE
+# REQUIRED FUNCTION (WAS MISSING BEFORE)
+# =========================
+
+def trim_qr_for_mockup(img):
+    crop_px = max(1, (QUIET * BOX) // 2)
+    return img.crop((crop_px, crop_px, img.width - crop_px, img.height - crop_px))
+
+
+def create_card_mockup(qr_img):
+    card = Image.open("static/blackcard.png").convert("RGBA")
+
+    qr_crop = trim_qr_for_mockup(qr_img)
+
+    qr_target_w = int(card.width * 0.32)
+    qr_small = qr_crop.resize((qr_target_w, qr_target_w), Image.LANCZOS)
+
+    qr_x = card.width - qr_small.width - int(card.width * 0.05)
+    qr_y = card.height - qr_small.height - int(card.height * 0.07)
+
+    card.paste(qr_small, (qr_x, qr_y), qr_small)
+    return card
+
+
+# =========================
+# 🔥 ONLY MODIFIED FUNCTION
 # =========================
 
 def create_dome_mockup(qr_img):
@@ -344,8 +396,6 @@ def create_dome_mockup(qr_img):
 
     return base.resize((int(dome_w * 0.5), int(dome_h * 0.5)), Image.LANCZOS)
 
-
-# =========================
 
 @app.route("/", methods=["GET", "POST"])
 def home():
