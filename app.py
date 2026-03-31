@@ -210,10 +210,9 @@ def fetch_uploaded_image(file_storage):
         return None
 
 
-# ---------------------------
-# EVERYTHING BELOW IS IDENTICAL TO YOUR MASTER
-# ---------------------------
-
+# =========================
+# ALL YOUR QR LOGIC BELOW — UNCHANGED
+# =========================
 
 def quantize_color(rgb, bucket=32):
     return (
@@ -310,9 +309,9 @@ def choose_background_color(art):
     return most_common[0][0]
 
 
-# ---------------------------
-# 🔥 ONLY FUNCTION CHANGED
-# ---------------------------
+# =========================
+# 🔥 ONLY CHANGE
+# =========================
 
 def create_dome_mockup(qr_img):
     dome = Image.open("static/dome_piece1.png").convert("RGBA")
@@ -346,7 +345,7 @@ def create_dome_mockup(qr_img):
     return base.resize((int(dome_w * 0.5), int(dome_h * 0.5)), Image.LANCZOS)
 
 
-# ---------------------------
+# =========================
 
 @app.route("/", methods=["GET", "POST"])
 def home():
