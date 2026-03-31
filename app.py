@@ -25,6 +25,17 @@ body {{
     padding: 30px;
     background: #f3f3f3;
 }}
+
+h1 {{ margin-bottom: 24px; }}
+
+.label {{ font-weight: bold; margin-bottom: 8px; }}
+
+input[type="text"] {{
+    width: 360px;
+    padding: 10px;
+    font-size: 16px;
+}}
+
 #dropzone {{
     width: 420px;
     height: 220px;
@@ -33,8 +44,46 @@ body {{
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    margin-top: 10px;
+    background: #fff;
+    text-align: center;
+}}
+
+#dropzone.hover {{ border-color: #000; }}
+
+#preview {{
+    max-width: 260px;
+    max-height: 180px;
+    display: none;
+}}
+
+button {{
+    margin-top: 16px;
+    padding: 10px 18px;
+    font-size: 16px;
+    cursor: pointer;
+}}
+
+.results {{ margin-top: 40px; }}
+
+.result-block {{ margin-top: 30px; }}
+
+.generated-qr {{
+    max-width: 360px;
+    display: block;
+    margin-top: 12px;
     background: #fff;
 }}
+
+.mockups {{
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+}}
+
+.mockup-card {{ max-width: 540px; }}
+.mockup-dome {{ max-width: 200px; }}
+
 </style>
 </head>
 <body>
@@ -42,22 +91,21 @@ body {{
 <h1>QR Generator</h1>
 
 <form method="post" enctype="multipart/form-data">
-    <input type="text" name="data" required placeholder="Enter QR Data"><br><br>
+    <div class="label">QR Data</div>
+    <input type="text" name="data" required><br><br>
 
-    <div id="dropzone">Drop Image Here or Click</div>
+    <div class="label">Upload Artwork</div>
+    <div id="dropzone">Drop Image or Click</div>
     <input type="file" name="artfile" id="artfile" style="display:none">
 
-    <br><br>
+    <br>
     <button type="submit">Generate</button>
 </form>
 
-{f'<h2>QR</h2><img src="data:image/png;base64,{qr_img_b64}">' if qr_img_b64 else ""}
-
-{f'''
-<h2>Mockups</h2>
-<img src="data:image/png;base64,{card_mockup_b64}">
-<img src="data:image/png;base64,{dome_mockup_b64}">
-''' if card_mockup_b64 and dome_mockup_b64 else ""}
+<div class="results">
+    {f'<img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">' if qr_img_b64 else ""}
+    {f'<div class="mockups"><img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}"><img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}"></div>' if card_mockup_b64 else ""}
+</div>
 
 <script>
 const dz = document.getElementById("dropzone");
@@ -125,7 +173,7 @@ def create_card_mockup(qr_img):
     return card
 
 
-# 🔥 ONLY FUNCTION CHANGED
+# ✅ ONLY FUNCTION CHANGED — TRUE MASKING
 def create_dome_mockup(qr_img):
     dome = Image.open("static/dome_piece1.png").convert("RGBA")
     w, h = dome.size
@@ -135,8 +183,8 @@ def create_dome_mockup(qr_img):
     canvas = Image.new("RGBA", dome.size, (0,0,0,0))
     canvas.paste(qr, ((w-qr.width)//2, (h-qr.height)//2), qr)
 
-    # TRUE MASK
     alpha = dome.split()[-1]
+
     masked = Image.new("RGBA", dome.size, (0,0,0,0))
     masked.paste(canvas, (0,0), alpha)
 
