@@ -486,6 +486,17 @@ def generate_branded_qr(data, art=None):
     return canvas.convert("RGBA")
 
 
+def create_dome_only_qr(qr_img, output_size=900):
+    bg_color = qr_img.convert("RGB").getpixel((5, 5))
+    dome_qr = Image.new("RGBA", (output_size, output_size), (*bg_color, 255))
+
+    qr_x = (output_size - qr_img.width) // 2
+    qr_y = (output_size - qr_img.height) // 2
+
+    dome_qr.paste(qr_img, (qr_x, qr_y), qr_img)
+    return dome_qr
+
+
 def trim_qr_for_mockup(img):
     crop_px = max(1, (QUIET * BOX) // 2)
     return img.crop((crop_px, crop_px, img.width - crop_px, img.height - crop_px))
@@ -515,27 +526,14 @@ def create_dome_mockup(qr_img):
     dome = Image.open("static/dome_mask.png").convert("RGBA")
     dome_w, dome_h = dome.size
 
-    qr_crop = trim_qr_for_mockup(qr_img)
+    dome_qr = create_dome_only_qr(qr_img, output_size=900)
+    dome_base = dome_qr.resize((dome_w, dome_h), Image.LANCZOS)
 
-    qr_target = int(min(dome_w, dome_h) * 0.44)
-    qr_small = qr_crop.resize((qr_target, qr_target), Image.LANCZOS)
-
-    zoom = 1.15
-    zoomed_w = int(qr_small.width * zoom)
-    zoomed_h = int(qr_small.height * zoom)
-    qr_small = qr_small.resize((zoomed_w, zoomed_h), Image.LANCZOS)
-
-    base = Image.new("RGBA", dome.size, (255, 255, 255, 0))
-
-    qr_x = (dome_w - qr_small.width) // 2
-    qr_y = (dome_h - qr_small.height) // 2
-
-    base.paste(qr_small, (qr_x, qr_y), qr_small)
-    base.alpha_composite(dome, (0, 0))
+    dome_base.alpha_composite(dome, (0, 0))
 
     final_w = int(dome_w * 0.50)
     final_h = int(dome_h * 0.50)
-    return base.resize((final_w, final_h), Image.LANCZOS)
+    return dome_base.resize((final_w, final_h), Image.LANCZOS)
 
 
 @app.route("/", methods=["GET", "POST"])
