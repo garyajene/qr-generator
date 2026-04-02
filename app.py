@@ -1,6 +1,7 @@
 from flask import Flask, request
 from io import BytesIO
 import base64
+import random
 from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
@@ -330,11 +331,34 @@ def choose_background_color(art):
         return (255, 255, 255)
 
     if len(most_common) > 1 and most_common[0][1] == most_common[1][1]:
-        if saw_white:
-            return (255, 255, 255)
-        if saw_black:
-            return (0, 0, 0)
-        return (255, 255, 255)
+        edge_colors = sampled_colors[:20]
+        edge_counts = Counter(edge_colors)
+        edge_most_common = edge_counts.most_common()
+
+        if edge_most_common:
+            edge_top_count = edge_most_common[0][1]
+            tied_edge_colors = [color for color, count in edge_most_common if count == edge_top_count]
+
+            if len(tied_edge_colors) == 1:
+                winner = tied_edge_colors[0]
+                winner = tuple(max(0, min(255, c)) for c in winner)
+
+                if is_near_white(winner):
+                    return (255, 255, 255)
+                if is_near_black(winner):
+                    return (0, 0, 0)
+
+                return winner
+
+            winner = random.choice(tied_edge_colors)
+            winner = tuple(max(0, min(255, c)) for c in winner)
+
+            if is_near_white(winner):
+                return (255, 255, 255)
+            if is_near_black(winner):
+                return (0, 0, 0)
+
+            return winner
 
     winner = most_common[0][0]
     winner = tuple(max(0, min(255, c)) for c in winner)
