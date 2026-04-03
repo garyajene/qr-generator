@@ -272,35 +272,34 @@ def sample_region_average(img, x, y, radius=6):
 def build_sample_points(width, height):
     points = []
 
-    left_x = int(width * 0.12)
-    right_x = int(width * 0.88)
-    top_y = int(height * 0.12)
-    bottom_y = int(height * 0.88)
-
-    side_ys = [0.18, 0.34, 0.50, 0.66, 0.82]
-    side_xs = [0.18, 0.34, 0.50, 0.66, 0.82]
-
-    for ry in side_ys:
-        points.append((left_x, int(height * ry)))
-        points.append((right_x, int(height * ry)))
-
-    for rx in side_xs:
-        points.append((int(width * rx), top_y))
-        points.append((int(width * rx), bottom_y))
-
-    center_points = [
-        (0.35, 0.35),
-        (0.50, 0.35),
-        (0.65, 0.35),
-        (0.35, 0.50),
-        (0.50, 0.50),
-        (0.65, 0.50),
-        (0.42, 0.65),
-        (0.58, 0.65),
+    corner_xs = [
+        int(width * 0.08),
+        int(width * 0.18),
+    ]
+    corner_ys = [
+        int(height * 0.08),
+        int(height * 0.18),
     ]
 
-    for rx, ry in center_points:
-        points.append((int(width * rx), int(height * ry)))
+    # top-left
+    for x in corner_xs:
+        for y in corner_ys:
+            points.append((x, y))
+
+    # top-right
+    for x in [int(width * 0.82), int(width * 0.92)]:
+        for y in corner_ys:
+            points.append((x, y))
+
+    # bottom-left
+    for x in corner_xs:
+        for y in [int(height * 0.82), int(height * 0.92)]:
+            points.append((x, y))
+
+    # bottom-right
+    for x in [int(width * 0.82), int(width * 0.92)]:
+        for y in [int(height * 0.82), int(height * 0.92)]:
+            points.append((x, y))
 
     return points
 
@@ -313,15 +312,9 @@ def choose_background_color(art):
     points = build_sample_points(test.width, test.height)
 
     sampled_colors = []
-    saw_white = False
-    saw_black = False
 
     for x, y in points:
         rgb = sample_region_average(test, x, y, radius=7)
-        if is_near_white(rgb):
-            saw_white = True
-        if is_near_black(rgb):
-            saw_black = True
         sampled_colors.append(quantize_color(rgb, bucket=32))
 
     counts = Counter(sampled_colors)
@@ -331,7 +324,7 @@ def choose_background_color(art):
         return (255, 255, 255)
 
     if len(most_common) > 1 and most_common[0][1] == most_common[1][1]:
-        edge_colors = sampled_colors[:20]
+        edge_colors = sampled_colors
         edge_counts = Counter(edge_colors)
         edge_most_common = edge_counts.most_common()
 
@@ -342,32 +335,14 @@ def choose_background_color(art):
             if len(tied_edge_colors) == 1:
                 winner = tied_edge_colors[0]
                 winner = tuple(max(0, min(255, c)) for c in winner)
-
-                if is_near_white(winner):
-                    return (255, 255, 255)
-                if is_near_black(winner):
-                    return (0, 0, 0)
-
                 return winner
 
             winner = random.choice(tied_edge_colors)
             winner = tuple(max(0, min(255, c)) for c in winner)
-
-            if is_near_white(winner):
-                return (255, 255, 255)
-            if is_near_black(winner):
-                return (0, 0, 0)
-
             return winner
 
     winner = most_common[0][0]
     winner = tuple(max(0, min(255, c)) for c in winner)
-
-    if is_near_white(winner):
-        return (255, 255, 255)
-    if is_near_black(winner):
-        return (0, 0, 0)
-
     return winner
 
 
