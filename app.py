@@ -224,14 +224,6 @@ def fetch_uploaded_image(file_storage):
         return None
 
 
-def quantize_color(rgb, bucket=32):
-    return (
-        int(round(rgb[0] / bucket) * bucket),
-        int(round(rgb[1] / bucket) * bucket),
-        int(round(rgb[2] / bucket) * bucket),
-    )
-
-
 def color_distance(c1, c2):
     return ((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2 + (c1[2] - c2[2]) ** 2) ** 0.5
 
@@ -261,12 +253,15 @@ def sample_region_average(img, x, y, radius=6):
     if not valid:
         return (255, 255, 255)
 
-    count = len(valid)
-    return (
-        sum(p[0] for p in valid) // count,
-        sum(p[1] for p in valid) // count,
-        sum(p[2] for p in valid) // count,
-    )
+    counts = Counter(valid)
+    most_common = counts.most_common()
+    top_count = most_common[0][1]
+    tied_colors = [color for color, count in most_common if count == top_count]
+
+    if len(tied_colors) == 1:
+        return tied_colors[0]
+
+    return random.choice(tied_colors)
 
 
 def build_sample_points(width, height):
@@ -315,7 +310,7 @@ def choose_background_color(art):
 
     for x, y in points:
         rgb = sample_region_average(test, x, y, radius=7)
-        sampled_colors.append(quantize_color(rgb, bucket=32))
+        sampled_colors.append(rgb)
 
     counts = Counter(sampled_colors)
     most_common = counts.most_common()
@@ -323,25 +318,15 @@ def choose_background_color(art):
     if not most_common:
         return (255, 255, 255)
 
-    if len(most_common) > 1 and most_common[0][1] == most_common[1][1]:
-        edge_colors = sampled_colors
-        edge_counts = Counter(edge_colors)
-        edge_most_common = edge_counts.most_common()
+    top_count = most_common[0][1]
+    tied_colors = [color for color, count in most_common if count == top_count]
 
-        if edge_most_common:
-            edge_top_count = edge_most_common[0][1]
-            tied_edge_colors = [color for color, count in edge_most_common if count == edge_top_count]
+    if len(tied_colors) == 1:
+        winner = tied_colors[0]
+        winner = tuple(max(0, min(255, c)) for c in winner)
+        return winner
 
-            if len(tied_edge_colors) == 1:
-                winner = tied_edge_colors[0]
-                winner = tuple(max(0, min(255, c)) for c in winner)
-                return winner
-
-            winner = random.choice(tied_edge_colors)
-            winner = tuple(max(0, min(255, c)) for c in winner)
-            return winner
-
-    winner = most_common[0][0]
+    winner = random.choice(tied_colors)
     winner = tuple(max(0, min(255, c)) for c in winner)
     return winner
 
