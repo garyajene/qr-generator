@@ -272,33 +272,33 @@ def sample_region_average(img, x, y, radius=6):
 def build_sample_points(width, height):
     points = []
 
-    # 16 total points, 4 per corner, shifted inward from the extreme corners
-    tl_xs = [int(width * 0.18), int(width * 0.28)]
-    tl_ys = [int(height * 0.18), int(height * 0.28)]
+    corner_xs = [
+        int(width * 0.08),
+        int(width * 0.18),
+    ]
+    corner_ys = [
+        int(height * 0.08),
+        int(height * 0.18),
+    ]
 
-    tr_xs = [int(width * 0.72), int(width * 0.82)]
-    tr_ys = [int(height * 0.18), int(height * 0.28)]
-
-    bl_xs = [int(width * 0.18), int(width * 0.28)]
-    bl_ys = [int(height * 0.72), int(height * 0.82)]
-
-    br_xs = [int(width * 0.72), int(width * 0.82)]
-    br_ys = [int(height * 0.72), int(height * 0.82)]
-
-    for x in tl_xs:
-        for y in tl_ys:
+    # top-left
+    for x in corner_xs:
+        for y in corner_ys:
             points.append((x, y))
 
-    for x in tr_xs:
-        for y in tr_ys:
+    # top-right
+    for x in [int(width * 0.82), int(width * 0.92)]:
+        for y in corner_ys:
             points.append((x, y))
 
-    for x in bl_xs:
-        for y in bl_ys:
+    # bottom-left
+    for x in corner_xs:
+        for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
 
-    for x in br_xs:
-        for y in br_ys:
+    # bottom-right
+    for x in [int(width * 0.82), int(width * 0.92)]:
+        for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
 
     return points
