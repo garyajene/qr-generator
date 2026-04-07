@@ -42,336 +42,6 @@ def rgb_to_hex(rgb):
     return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
 
 
-def render_page(
-    qr_img_b64=None,
-    card_mockup_b64=None,
-    dome_mockup_b64=None,
-    data_value="",
-    art_data_b64="",
-    bg_override_value="",
-    current_bg_hex="#ffffff",
-):
-    safe_data_value = html.escape(data_value or "")
-    safe_art_data_b64 = html.escape(art_data_b64 or "")
-    safe_bg_override_value = html.escape(bg_override_value or "")
-    safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
-
-    return f"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>QR Generator</title>
-<style>
-body {{
-    font-family: Arial, sans-serif;
-    padding: 30px;
-    background: #ffffff;
-}}
-
-h1 {{
-    margin-bottom: 24px;
-}}
-
-.label {{
-    font-weight: bold;
-    margin-bottom: 8px;
-}}
-
-input[type="text"] {{
-    width: 360px;
-    padding: 10px;
-    font-size: 16px;
-}}
-
-#dropzone {{
-    width: 420px;
-    height: 220px;
-    border: 2px dashed #999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    margin-top: 10px;
-    background: #fff;
-    text-align: center;
-}}
-
-#dropzone.hover {{
-    border-color: #000;
-}}
-
-#preview {{
-    max-width: 260px;
-    max-height: 180px;
-    display: none;
-}}
-
-button {{
-    margin-top: 16px;
-    padding: 10px 18px;
-    font-size: 16px;
-    cursor: pointer;
-}}
-
-.results {{
-    margin-top: 40px;
-}}
-
-.result-block {{
-    margin-top: 30px;
-}}
-
-.generated-qr {{
-    max-width: 360px;
-    height: auto;
-    display: block;
-    margin-top: 12px;
-    background: #fff;
-}}
-
-.mockups {{
-    display: flex;
-    gap: 40px;
-    flex-wrap: wrap;
-    align-items: flex-start;
-}}
-
-.mockup-card {{
-    max-width: 540px;
-    height: auto;
-    display: block;
-    margin-top: 12px;
-}}
-
-.mockup-dome {{
-    max-width: 200px;
-    height: auto;
-    display: block;
-    margin-top: 12px;
-}}
-
-.subhead {{
-    font-weight: bold;
-    margin-bottom: 8px;
-}}
-
-.bg-tools {{
-    margin-top: 20px;
-    padding: 18px;
-    border: 1px solid #ddd;
-    background: #fafafa;
-    max-width: 520px;
-}}
-
-.bg-tools-row {{
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-top: 12px;
-}}
-
-.bg-tools input[type="color"] {{
-    width: 56px;
-    height: 42px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-}}
-
-.bg-tools input[type="text"] {{
-    width: 140px;
-}}
-
-.bg-swatch {{
-    width: 22px;
-    height: 22px;
-    border: 1px solid #999;
-    display: inline-block;
-    vertical-align: middle;
-    border-radius: 4px;
-    background: {safe_current_bg_hex};
-}}
-
-.small-note {{
-    font-size: 14px;
-    color: #555;
-    margin-top: 8px;
-}}
-</style>
-</head>
-<body>
-
-<h1>QR Generator</h1>
-
-<form action="/" method="post" enctype="multipart/form-data">
-    <div class="label">QR Data</div>
-    <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
-
-    <div class="label">Upload Artwork (optional)</div>
-    <div id="dropzone">
-        <span id="droptext">Drop Image Here or Click</span>
-        <img id="preview" />
-    </div>
-    <input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
-    <input type="hidden" name="art_data" id="art_data" value="{safe_art_data_b64}">
-
-    <br>
-    <button type="submit">Generate</button>
-
-    <div class="results">
-        {f'''
-        <div class="result-block">
-            <h2>Generated QR</h2>
-            <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
-        </div>
-        ''' if qr_img_b64 else ''}
-
-        {f'''
-        <div class="bg-tools">
-            <div>
-                <button type="button" id="toggle-bg-tools">Change Background Color</button>
-                <span style="margin-left:12px;">Current: <span class="bg-swatch" id="current_bg_swatch"></span> <span id="current_bg_label">{safe_current_bg_hex}</span></span>
-            </div>
-
-            <div id="bg_tools_panel" style="display:none;">
-                <div class="bg-tools-row">
-                    <input type="color" id="bg_color_picker" value="{safe_current_bg_hex}">
-                    <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}" placeholder="#ff0058">
-                    <button type="button" id="eyedropper_btn">Eyedropper</button>
-                    <button type="submit">Apply Background Color</button>
-                </div>
-                <div class="small-note">Use a hex color like #ff0058, the color picker, or the eyedropper.</div>
-            </div>
-        </div>
-        ''' if qr_img_b64 else ''}
-
-        {f'''
-        <div class="result-block">
-            <h2>Mockups</h2>
-            <div class="mockups">
-                <div>
-                    <div class="subhead">Business Card</div>
-                    <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
-                </div>
-                <div>
-                    <div class="subhead">Dome Sticker</div>
-                    <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
-                </div>
-            </div>
-        </div>
-        ''' if card_mockup_b64 and dome_mockup_b64 else ''}
-    </div>
-</form>
-
-<script>
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("artfile");
-const preview = document.getElementById("preview");
-const droptext = document.getElementById("droptext");
-
-dropzone.onclick = () => fileInput.click();
-
-fileInput.onchange = () => {{
-    const file = fileInput.files[0];
-    if (file) {{
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = "block";
-        droptext.style.display = "none";
-    }}
-}};
-
-dropzone.addEventListener("dragover", e => {{
-    e.preventDefault();
-    dropzone.classList.add("hover");
-}});
-
-dropzone.addEventListener("dragleave", () => {{
-    dropzone.classList.remove("hover");
-}});
-
-dropzone.addEventListener("drop", e => {{
-    e.preventDefault();
-    dropzone.classList.remove("hover");
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
-        fileInput.files = e.dataTransfer.files;
-        const file = e.dataTransfer.files[0];
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = "block";
-        droptext.style.display = "none";
-    }}
-}});
-
-const toggleBgToolsBtn = document.getElementById("toggle-bg-tools");
-const bgToolsPanel = document.getElementById("bg_tools_panel");
-const bgColorPicker = document.getElementById("bg_color_picker");
-const bgOverrideInput = document.getElementById("bg_override");
-const eyedropperBtn = document.getElementById("eyedropper_btn");
-const currentBgLabel = document.getElementById("current_bg_label");
-const currentBgSwatch = document.getElementById("current_bg_swatch");
-
-function normalizeHex(value) {{
-    if (!value) return "";
-    let v = value.trim();
-    if (!v.startsWith("#")) v = "#" + v;
-    if (/^#[0-9a-fA-F]{{6}}$/.test(v)) return v.toLowerCase();
-    return "";
-}}
-
-if (toggleBgToolsBtn && bgToolsPanel) {{
-    toggleBgToolsBtn.addEventListener("click", () => {{
-        bgToolsPanel.style.display = bgToolsPanel.style.display === "none" ? "block" : "none";
-    }});
-}}
-
-if (bgColorPicker && bgOverrideInput) {{
-    bgColorPicker.addEventListener("input", () => {{
-        bgOverrideInput.value = bgColorPicker.value;
-    }});
-
-    bgOverrideInput.addEventListener("input", () => {{
-        const hex = normalizeHex(bgOverrideInput.value);
-        if (hex) {{
-            bgColorPicker.value = hex;
-        }}
-    }});
-}}
-
-if (eyedropperBtn) {{
-    if (!("EyeDropper" in window)) {{
-        eyedropperBtn.disabled = true;
-        eyedropperBtn.title = "Eyedropper is not supported in this browser.";
-    }} else {{
-        eyedropperBtn.addEventListener("click", async () => {{
-            try {{
-                const eyeDropper = new EyeDropper();
-                const result = await eyeDropper.open();
-                if (result && result.sRGBHex) {{
-                    bgOverrideInput.value = result.sRGBHex.toLowerCase();
-                    bgColorPicker.value = result.sRGBHex.toLowerCase();
-                }}
-            }} catch (err) {{
-                // user cancelled
-            }}
-        }});
-    }}
-}}
-
-if (currentBgLabel && currentBgSwatch) {{
-    const currentHex = currentBgLabel.textContent.trim();
-    if (/^#[0-9a-fA-F]{{6}}$/.test(currentHex)) {{
-        currentBgSwatch.style.background = currentHex;
-    }}
-}}
-</script>
-
-</body>
-</html>
-"""
-
-
 def image_to_base64(img):
     out = BytesIO()
     img.save(out, format="PNG")
@@ -456,18 +126,22 @@ def build_sample_points(width, height):
         int(height * 0.18),
     ]
 
+    # top-left
     for x in corner_xs:
         for y in corner_ys:
             points.append((x, y))
 
+    # top-right
     for x in [int(width * 0.82), int(width * 0.92)]:
         for y in corner_ys:
             points.append((x, y))
 
+    # bottom-left
     for x in corner_xs:
         for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
 
+    # bottom-right
     for x in [int(width * 0.82), int(width * 0.92)]:
         for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
@@ -509,6 +183,41 @@ def choose_background_color(art, bg_override=None):
     winner = random.choice(tied_colors)
     winner = tuple(max(0, min(255, c)) for c in winner)
     return winner
+
+
+def suggest_background_colors(art, current_bg_hex):
+    suggestions = []
+    seen = set()
+
+    def add_color(rgb):
+        if rgb is None:
+            return
+        rgb = tuple(max(0, min(255, c)) for c in rgb)
+        hex_value = rgb_to_hex(rgb)
+        if hex_value not in seen:
+            seen.add(hex_value)
+            suggestions.append(hex_value)
+
+    parsed_current = parse_hex_color(current_bg_hex)
+    if parsed_current:
+        add_color(parsed_current)
+
+    add_color((255, 255, 255))
+    add_color((0, 0, 0))
+
+    if art:
+        test = art.convert("RGBA").resize((300, 300), Image.LANCZOS)
+        points = build_sample_points(test.width, test.height)
+
+        sampled_colors = []
+        for x, y in points:
+            sampled_colors.append(sample_region_average(test, x, y, radius=7))
+
+        counts = Counter(sampled_colors)
+        for color, _count in counts.most_common(6):
+            add_color(color)
+
+    return suggestions[:8]
 
 
 def normalize_artwork_to_square(art, tolerance=0.12, bg_override=None):
@@ -724,6 +433,463 @@ def create_dome_mockup(qr_img):
     return dome_base.resize((final_w, final_h), Image.LANCZOS)
 
 
+def render_page(
+    qr_img_b64=None,
+    card_mockup_b64=None,
+    dome_mockup_b64=None,
+    data_value="",
+    art_data_b64="",
+    bg_override_value="",
+    current_bg_hex="#ffffff",
+    suggested_colors=None,
+):
+    safe_data_value = html.escape(data_value or "")
+    safe_art_data_b64 = html.escape(art_data_b64 or "")
+    safe_bg_override_value = html.escape(bg_override_value or "")
+    safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
+
+    if suggested_colors is None:
+        suggested_colors = ["#ffffff", "#000000"]
+
+    swatches_html = "".join(
+        f'<button type="button" class="color-swatch" data-color="{html.escape(color)}" style="background:{html.escape(color)};" title="{html.escape(color)}"></button>'
+        for color in suggested_colors
+    )
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>QR Generator</title>
+<style>
+body {{
+    font-family: Arial, sans-serif;
+    padding: 30px;
+    background: #ffffff;
+}}
+
+h1 {{
+    margin-bottom: 24px;
+}}
+
+.label {{
+    font-weight: bold;
+    margin-bottom: 8px;
+}}
+
+input[type="text"] {{
+    width: 360px;
+    padding: 10px;
+    font-size: 16px;
+}}
+
+#dropzone {{
+    width: 420px;
+    height: 220px;
+    border: 2px dashed #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-top: 10px;
+    background: #fff;
+    text-align: center;
+}}
+
+#dropzone.hover {{
+    border-color: #000;
+}}
+
+#preview {{
+    max-width: 260px;
+    max-height: 180px;
+    display: none;
+}}
+
+button {{
+    margin-top: 16px;
+    padding: 10px 18px;
+    font-size: 16px;
+    cursor: pointer;
+}}
+
+.results {{
+    margin-top: 40px;
+}}
+
+.result-block {{
+    margin-top: 30px;
+}}
+
+.generated-qr {{
+    max-width: 360px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+    background: #fff;
+}}
+
+.mockups {{
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}}
+
+.mockup-card {{
+    max-width: 540px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+}}
+
+.mockup-dome {{
+    max-width: 200px;
+    height: auto;
+    display: block;
+    margin-top: 12px;
+}}
+
+.subhead {{
+    font-weight: bold;
+    margin-bottom: 8px;
+}}
+
+.bg-tools {{
+    margin-top: 20px;
+    padding: 22px;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    max-width: 640px;
+    border-radius: 10px;
+}}
+
+.bg-title {{
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}}
+
+.bg-subtitle {{
+    color: #555;
+    margin-bottom: 18px;
+}}
+
+.bg-current {{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}}
+
+.current-chip {{
+    width: 34px;
+    height: 34px;
+    border: 1px solid #999;
+    border-radius: 8px;
+    background: {safe_current_bg_hex};
+}}
+
+.bg-swatch-grid {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}}
+
+.color-swatch {{
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    border: 2px solid #ccc;
+    padding: 0;
+    cursor: pointer;
+}}
+
+.color-swatch:hover {{
+    border-color: #000;
+}}
+
+.primary-actions {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}}
+
+.primary-btn {{
+    padding: 12px 18px;
+    font-size: 16px;
+    border-radius: 8px;
+}}
+
+.advanced-block {{
+    border-top: 1px solid #ddd;
+    padding-top: 16px;
+}}
+
+.advanced-toggle {{
+    margin-top: 0;
+}}
+
+.advanced-panel {{
+    display: none;
+    margin-top: 14px;
+}}
+
+.advanced-row {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}}
+
+.advanced-panel input[type="color"] {{
+    width: 60px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}}
+
+.advanced-panel input[type="text"] {{
+    width: 150px;
+}}
+
+.small-note {{
+    font-size: 14px;
+    color: #555;
+    margin-top: 8px;
+}}
+</style>
+</head>
+<body>
+
+<h1>QR Generator</h1>
+
+<form action="/" method="post" enctype="multipart/form-data">
+    <div class="label">QR Data</div>
+    <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
+
+    <div class="label">Upload Artwork (optional)</div>
+    <div id="dropzone">
+        <span id="droptext">Drop Image Here or Click</span>
+        <img id="preview" />
+    </div>
+    <input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
+    <input type="hidden" name="art_data" id="art_data" value="{safe_art_data_b64}">
+    <input type="hidden" name="bg_override" id="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}">
+
+    <br>
+    <button type="submit">Generate</button>
+
+    <div class="results">
+        {f'''
+        <div class="result-block">
+            <h2>Generated QR</h2>
+            <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
+        </div>
+        ''' if qr_img_b64 else ''}
+
+        {f'''
+        <div class="bg-tools">
+            <div class="bg-title">Pick Your Background Color</div>
+            <div class="bg-subtitle">Choose a color below, pick one from the image, or open advanced controls.</div>
+
+            <div class="bg-current">
+                <div class="current-chip" id="current_bg_chip"></div>
+                <div><strong>Current Color:</strong> <span id="current_bg_label">{safe_current_bg_hex}</span></div>
+            </div>
+
+            <div class="bg-swatch-grid">
+                {swatches_html}
+            </div>
+
+            <div class="primary-actions">
+                <button type="button" class="primary-btn" id="pick_from_image_btn">Pick From Image</button>
+                <button type="submit" class="primary-btn">Apply Background Color</button>
+                <button type="button" class="primary-btn" id="toggle_advanced_btn">Advanced</button>
+            </div>
+
+            <div class="advanced-block">
+                <div class="advanced-panel" id="advanced_panel">
+                    <div class="advanced-row">
+                        <input type="color" id="bg_color_picker" value="{safe_current_bg_hex}">
+                        <input type="text" id="bg_hex_input" value="{safe_bg_override_value or safe_current_bg_hex}" placeholder="#ff0058">
+                    </div>
+                    <div class="small-note">Use the picker or type a hex color like #ff0058.</div>
+                </div>
+            </div>
+        </div>
+        ''' if qr_img_b64 else ''}
+
+        {f'''
+        <div class="result-block">
+            <h2>Mockups</h2>
+            <div class="mockups">
+                <div>
+                    <div class="subhead">Business Card</div>
+                    <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
+                </div>
+                <div>
+                    <div class="subhead">Dome Sticker</div>
+                    <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
+                </div>
+            </div>
+        </div>
+        ''' if card_mockup_b64 and dome_mockup_b64 else ''}
+    </div>
+</form>
+
+<script>
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("artfile");
+const preview = document.getElementById("preview");
+const droptext = document.getElementById("droptext");
+const artDataInput = document.getElementById("art_data");
+
+dropzone.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {{
+    const file = fileInput.files[0];
+    if (file) {{
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+        droptext.style.display = "none";
+
+        const reader = new FileReader();
+        reader.onload = function(e) {{
+            const result = e.target.result || "";
+            const parts = result.split(",");
+            if (parts.length === 2) {{
+                artDataInput.value = parts[1];
+            }}
+        }};
+        reader.readAsDataURL(file);
+    }}
+}};
+
+dropzone.addEventListener("dragover", e => {{
+    e.preventDefault();
+    dropzone.classList.add("hover");
+}});
+
+dropzone.addEventListener("dragleave", () => {{
+    dropzone.classList.remove("hover");
+}});
+
+dropzone.addEventListener("drop", e => {{
+    e.preventDefault();
+    dropzone.classList.remove("hover");
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
+        fileInput.files = e.dataTransfer.files;
+        const file = e.dataTransfer.files[0];
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+        droptext.style.display = "none";
+
+        const reader = new FileReader();
+        reader.onload = function(e) {{
+            const result = e.target.result || "";
+            const parts = result.split(",");
+            if (parts.length === 2) {{
+                artDataInput.value = parts[1];
+            }}
+        }};
+        reader.readAsDataURL(file);
+    }}
+}});
+
+const bgOverrideInput = document.getElementById("bg_override");
+const bgHexInput = document.getElementById("bg_hex_input");
+const bgColorPicker = document.getElementById("bg_color_picker");
+const currentBgLabel = document.getElementById("current_bg_label");
+const currentBgChip = document.getElementById("current_bg_chip");
+const toggleAdvancedBtn = document.getElementById("toggle_advanced_btn");
+const advancedPanel = document.getElementById("advanced_panel");
+const pickFromImageBtn = document.getElementById("pick_from_image_btn");
+const swatches = document.querySelectorAll(".color-swatch");
+
+function normalizeHex(value) {{
+    if (!value) return "";
+    let v = value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-fA-F]{{6}}$/.test(v)) return v.toLowerCase();
+    return "";
+}}
+
+function applyChosenColor(hex) {{
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+    if (bgOverrideInput) bgOverrideInput.value = normalized;
+    if (bgHexInput) bgHexInput.value = normalized;
+    if (bgColorPicker) bgColorPicker.value = normalized;
+    if (currentBgLabel) currentBgLabel.textContent = normalized;
+    if (currentBgChip) currentBgChip.style.background = normalized;
+}}
+
+if (currentBgLabel && currentBgChip) {{
+    const currentHex = normalizeHex(currentBgLabel.textContent.trim());
+    if (currentHex) {{
+        currentBgChip.style.background = currentHex;
+    }}
+}}
+
+swatches.forEach(btn => {{
+    btn.addEventListener("click", () => {{
+        const color = btn.getAttribute("data-color");
+        applyChosenColor(color);
+    }});
+}});
+
+if (bgColorPicker) {{
+    bgColorPicker.addEventListener("input", () => {{
+        applyChosenColor(bgColorPicker.value);
+    }});
+}}
+
+if (bgHexInput) {{
+    bgHexInput.addEventListener("input", () => {{
+        const hex = normalizeHex(bgHexInput.value);
+        if (hex) {{
+            applyChosenColor(hex);
+        }}
+    }});
+}}
+
+if (toggleAdvancedBtn && advancedPanel) {{
+    toggleAdvancedBtn.addEventListener("click", () => {{
+        advancedPanel.style.display = advancedPanel.style.display === "block" ? "none" : "block";
+    }});
+}}
+
+if (pickFromImageBtn) {{
+    if (!("EyeDropper" in window)) {{
+        pickFromImageBtn.disabled = true;
+        pickFromImageBtn.title = "Pick From Image is not supported in this browser.";
+    }} else {{
+        pickFromImageBtn.addEventListener("click", async () => {{
+            try {{
+                const eyeDropper = new EyeDropper();
+                const result = await eyeDropper.open();
+                if (result && result.sRGBHex) {{
+                    applyChosenColor(result.sRGBHex);
+                }}
+            }} catch (err) {{
+                // user cancelled
+            }}
+        }});
+    }}
+}}
+</script>
+
+</body>
+</html>
+"""
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     qr_b64 = None
@@ -733,6 +899,7 @@ def home():
     art_data_b64 = ""
     bg_override_value = ""
     current_bg_hex = "#ffffff"
+    suggested_colors = ["#ffffff", "#000000"]
 
     if request.method == "POST":
         data_value = (request.form.get("data") or "").strip()
@@ -762,6 +929,8 @@ def home():
             if art is not None:
                 art_data_b64 = image_to_base64(art)
 
+            suggested_colors = suggest_background_colors(art, current_bg_hex)
+
     return render_page(
         qr_img_b64=qr_b64,
         card_mockup_b64=card_mockup_b64,
@@ -770,6 +939,7 @@ def home():
         art_data_b64=art_data_b64,
         bg_override_value=bg_override_value,
         current_bg_hex=current_bg_hex,
+        suggested_colors=suggested_colors,
     )
 
 
