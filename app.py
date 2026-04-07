@@ -161,28 +161,21 @@ button {{
     padding: 18px;
     border: 1px solid #ddd;
     background: #fafafa;
-    max-width: 520px;
+    max-width: 620px;
+    border-radius: 8px;
 }}
 
-.bg-tools-row {{
+.bg-tools-head {{
     display: flex;
+    align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+}}
+
+.bg-current-wrap {{
+    display: inline-flex;
     align-items: center;
-    margin-top: 12px;
-}}
-
-.bg-tools input[type="color"] {{
-    width: 56px;
-    height: 42px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-}}
-
-.bg-tools input[type="text"] {{
-    width: 140px;
+    gap: 10px;
 }}
 
 .bg-swatch {{
@@ -199,6 +192,130 @@ button {{
     font-size: 14px;
     color: #555;
     margin-top: 8px;
+}}
+
+#bg_tools_panel {{
+    display: none;
+    margin-top: 18px;
+    border-top: 1px solid #ddd;
+    padding-top: 18px;
+}}
+
+.bg-panel-title {{
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}}
+
+.bg-panel-sub {{
+    color: #555;
+    margin-bottom: 16px;
+}}
+
+.bg-picker-layout {{
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}}
+
+.bg-left {{
+    min-width: 240px;
+}}
+
+.bg-preview-large {{
+    width: 220px;
+    height: 160px;
+    border-radius: 10px;
+    border: 1px solid #bbb;
+    background: {safe_current_bg_hex};
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+}}
+
+.bg-right {{
+    min-width: 260px;
+}}
+
+.bg-tools-row {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 12px;
+}}
+
+.bg-tools input[type="color"] {{
+    width: 64px;
+    height: 46px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}}
+
+.bg-tools input[type="text"] {{
+    width: 150px;
+}}
+
+.rgb-grid {{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}}
+
+.rgb-box {{
+    min-width: 84px;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background: #fff;
+    text-align: center;
+}}
+
+.rgb-box .val {{
+    font-size: 28px;
+    line-height: 1.1;
+}}
+
+.rgb-box .lab {{
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
+}}
+
+.doc-colors-title {{
+    margin-top: 18px;
+    font-size: 16px;
+    font-weight: bold;
+}}
+
+.doc-colors {{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}}
+
+.doc-swatch {{
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    padding: 0;
+    cursor: pointer;
+}}
+
+.doc-swatch:hover {{
+    border-color: #000;
+}}
+
+.apply-row {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 16px;
 }}
 </style>
 </head>
@@ -231,19 +348,64 @@ button {{
 
         {f'''
         <div class="bg-tools">
-            <div>
+            <div class="bg-tools-head">
                 <button type="button" id="toggle-bg-tools">Change Background Color</button>
-                <span style="margin-left:12px;">Current: <span class="bg-swatch" id="current_bg_swatch"></span> <span id="current_bg_label">{safe_current_bg_hex}</span></span>
+                <span class="bg-current-wrap">
+                    <strong>Current:</strong>
+                    <span class="bg-swatch" id="current_bg_swatch"></span>
+                    <span id="current_bg_label">{safe_current_bg_hex}</span>
+                </span>
             </div>
 
-            <div id="bg_tools_panel" style="display:none;">
-                <div class="bg-tools-row">
-                    <input type="color" id="bg_color_picker" value="{safe_current_bg_hex}">
-                    <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}" placeholder="#ff0058">
-                    <button type="button" id="eyedropper_btn">Eyedropper</button>
-                    <button type="submit">Apply Background Color</button>
+            <div id="bg_tools_panel">
+                <div class="bg-panel-title">Solid Color</div>
+                <div class="bg-panel-sub">Pick visually, use a hex value, or sample directly from the image.</div>
+
+                <div class="bg-picker-layout">
+                    <div class="bg-left">
+                        <div class="bg-preview-large" id="bg_preview_large"></div>
+
+                        <div class="bg-tools-row">
+                            <input type="color" id="bg_color_picker" value="{safe_current_bg_hex}">
+                            <button type="button" id="eyedropper_btn">Pick From Image</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-right">
+                        <div class="bg-tools-row">
+                            <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}" placeholder="#ff0058">
+                            <button type="submit">Apply Background Color</button>
+                        </div>
+
+                        <div class="rgb-grid">
+                            <div class="rgb-box">
+                                <div class="val" id="hex_val">{safe_current_bg_hex.replace('#','')}</div>
+                                <div class="lab">HEX</div>
+                            </div>
+                            <div class="rgb-box">
+                                <div class="val" id="r_val">255</div>
+                                <div class="lab">R</div>
+                            </div>
+                            <div class="rgb-box">
+                                <div class="val" id="g_val">255</div>
+                                <div class="lab">G</div>
+                            </div>
+                            <div class="rgb-box">
+                                <div class="val" id="b_val">255</div>
+                                <div class="lab">B</div>
+                            </div>
+                        </div>
+
+                        <div class="doc-colors-title">Document Colors</div>
+                        <div class="doc-colors">
+                            <button type="button" class="doc-swatch" data-color="#000000" style="background:#000000;"></button>
+                            <button type="button" class="doc-swatch" data-color="#ffffff" style="background:#ffffff;"></button>
+                            <button type="button" class="doc-swatch" data-color="{safe_current_bg_hex}" style="background:{safe_current_bg_hex};"></button>
+                        </div>
+
+                        <div class="small-note">Use the color picker, type a hex color, or sample from the image.</div>
+                    </div>
                 </div>
-                <div class="small-note">Use a hex color like #ff0058, the color picker, or the eyedropper.</div>
             </div>
         </div>
         ''' if qr_img_b64 else ''}
@@ -311,6 +473,12 @@ const bgOverrideInput = document.getElementById("bg_override");
 const eyedropperBtn = document.getElementById("eyedropper_btn");
 const currentBgLabel = document.getElementById("current_bg_label");
 const currentBgSwatch = document.getElementById("current_bg_swatch");
+const bgPreviewLarge = document.getElementById("bg_preview_large");
+const hexVal = document.getElementById("hex_val");
+const rVal = document.getElementById("r_val");
+const gVal = document.getElementById("g_val");
+const bVal = document.getElementById("b_val");
+const docSwatches = document.querySelectorAll(".doc-swatch");
 
 function normalizeHex(value) {{
     if (!value) return "";
@@ -320,37 +488,71 @@ function normalizeHex(value) {{
     return "";
 }}
 
+function hexToRgb(hex) {{
+    const v = normalizeHex(hex);
+    if (!v) return null;
+    return {{
+        r: parseInt(v.slice(1, 3), 16),
+        g: parseInt(v.slice(3, 5), 16),
+        b: parseInt(v.slice(5, 7), 16),
+    }};
+}}
+
+function updateVisuals(hex) {{
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+
+    const rgb = hexToRgb(normalized);
+    if (!rgb) return;
+
+    if (bgOverrideInput) bgOverrideInput.value = normalized;
+    if (bgColorPicker) bgColorPicker.value = normalized;
+    if (currentBgLabel) currentBgLabel.textContent = normalized;
+    if (currentBgSwatch) currentBgSwatch.style.background = normalized;
+    if (bgPreviewLarge) bgPreviewLarge.style.background = normalized;
+    if (hexVal) hexVal.textContent = normalized.replace("#", "");
+    if (rVal) rVal.textContent = rgb.r;
+    if (gVal) gVal.textContent = rgb.g;
+    if (bVal) bVal.textContent = rgb.b;
+}}
+
 if (toggleBgToolsBtn && bgToolsPanel) {{
     toggleBgToolsBtn.addEventListener("click", () => {{
-        bgToolsPanel.style.display = bgToolsPanel.style.display === "none" ? "block" : "none";
+        bgToolsPanel.style.display = bgToolsPanel.style.display === "none" ? "block" : "block";
     }});
 }}
 
 if (bgColorPicker && bgOverrideInput) {{
     bgColorPicker.addEventListener("input", () => {{
-        bgOverrideInput.value = bgColorPicker.value;
+        updateVisuals(bgColorPicker.value);
     }});
 
     bgOverrideInput.addEventListener("input", () => {{
         const hex = normalizeHex(bgOverrideInput.value);
         if (hex) {{
-            bgColorPicker.value = hex;
+            updateVisuals(hex);
         }}
     }});
 }}
 
+docSwatches.forEach(btn => {{
+    btn.addEventListener("click", () => {{
+        const color = btn.getAttribute("data-color");
+        updateVisuals(color);
+    }});
+}});
+
 if (eyedropperBtn) {{
     if (!("EyeDropper" in window)) {{
         eyedropperBtn.disabled = true;
-        eyedropperBtn.title = "Eyedropper is not supported in this browser.";
+        eyedropperBtn.title = "Pick From Image is not supported in this browser.";
     }} else {{
         eyedropperBtn.addEventListener("click", async () => {{
             try {{
                 const eyeDropper = new EyeDropper();
                 const result = await eyeDropper.open();
                 if (result && result.sRGBHex) {{
-                    bgOverrideInput.value = result.sRGBHex.toLowerCase();
-                    bgColorPicker.value = result.sRGBHex.toLowerCase();
+                    updateVisuals(result.sRGBHex.toLowerCase());
                 }}
             }} catch (err) {{
                 // user cancelled
@@ -359,10 +561,10 @@ if (eyedropperBtn) {{
     }}
 }}
 
-if (currentBgLabel && currentBgSwatch) {{
-    const currentHex = currentBgLabel.textContent.trim();
-    if (/^#[0-9a-fA-F]{{6}}$/.test(currentHex)) {{
-        currentBgSwatch.style.background = currentHex;
+if (currentBgLabel) {{
+    const currentHex = normalizeHex(currentBgLabel.textContent.trim());
+    if (currentHex) {{
+        updateVisuals(currentHex);
     }}
 }}
 </script>
