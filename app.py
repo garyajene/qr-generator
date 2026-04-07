@@ -5,6 +5,7 @@ import random
 from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
+import html
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -14,7 +15,47 @@ BOX = 16
 QUIET = 6
 
 
-def render_page(qr_img_b64=None, card_mockup_b64=None, dome_mockup_b64=None):
+def parse_hex_color(value):
+    if not value:
+        return None
+
+    value = value.strip()
+    if not value:
+        return None
+
+    if value.startswith("#"):
+        value = value[1:]
+
+    if len(value) != 6:
+        return None
+
+    try:
+        r = int(value[0:2], 16)
+        g = int(value[2:4], 16)
+        b = int(value[4:6], 16)
+        return (r, g, b)
+    except ValueError:
+        return None
+
+
+def rgb_to_hex(rgb):
+    return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
+
+
+def render_page(
+    qr_img_b64=None,
+    card_mockup_b64=None,
+    dome_mockup_b64=None,
+    data_value="",
+    art_data_b64="",
+    bg_override_value="",
+    current_bg_hex="#ffffff",
+):
+    safe_data_value = html.escape(data_value or "")
+    safe_art_data_b64 = html.escape(art_data_b64 or "")
+    safe_bg_override_value = html.escape(bg_override_value or "")
+    safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
+
     return f"""
 <!doctype html>
 <html>
@@ -114,6 +155,51 @@ button {{
     font-weight: bold;
     margin-bottom: 8px;
 }}
+
+.bg-tools {{
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    max-width: 520px;
+}}
+
+.bg-tools-row {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 12px;
+}}
+
+.bg-tools input[type="color"] {{
+    width: 56px;
+    height: 42px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}}
+
+.bg-tools input[type="text"] {{
+    width: 140px;
+}}
+
+.bg-swatch {{
+    width: 22px;
+    height: 22px;
+    border: 1px solid #999;
+    display: inline-block;
+    vertical-align: middle;
+    border-radius: 4px;
+    background: {safe_current_bg_hex};
+}}
+
+.small-note {{
+    font-size: 14px;
+    color: #555;
+    margin-top: 8px;
+}}
 </style>
 </head>
 <body>
@@ -122,7 +208,7 @@ button {{
 
 <form action="/" method="post" enctype="multipart/form-data">
     <div class="label">QR Data</div>
-    <input type="text" name="data" required placeholder="Enter QR Data"><br><br>
+    <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
 
     <div class="label">Upload Artwork (optional)</div>
     <div id="dropzone">
@@ -130,35 +216,55 @@ button {{
         <img id="preview" />
     </div>
     <input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
+    <input type="hidden" name="art_data" id="art_data" value="{safe_art_data_b64}">
 
     <br>
     <button type="submit">Generate</button>
-</form>
 
-<div class="results">
-    {f'''
-    <div class="result-block">
-        <h2>Generated QR</h2>
-        <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
-    </div>
-    ''' if qr_img_b64 else ''}
+    <div class="results">
+        {f'''
+        <div class="result-block">
+            <h2>Generated QR</h2>
+            <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
+        </div>
+        ''' if qr_img_b64 else ''}
 
-    {f'''
-    <div class="result-block">
-        <h2>Mockups</h2>
-        <div class="mockups">
+        {f'''
+        <div class="bg-tools">
             <div>
-                <div class="subhead">Business Card</div>
-                <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
+                <button type="button" id="toggle-bg-tools">Change Background Color</button>
+                <span style="margin-left:12px;">Current: <span class="bg-swatch" id="current_bg_swatch"></span> <span id="current_bg_label">{safe_current_bg_hex}</span></span>
             </div>
-            <div>
-                <div class="subhead">Dome Sticker</div>
-                <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
+
+            <div id="bg_tools_panel" style="display:none;">
+                <div class="bg-tools-row">
+                    <input type="color" id="bg_color_picker" value="{safe_current_bg_hex}">
+                    <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}" placeholder="#ff0058">
+                    <button type="button" id="eyedropper_btn">Eyedropper</button>
+                    <button type="submit">Apply Background Color</button>
+                </div>
+                <div class="small-note">Use a hex color like #ff0058, the color picker, or the eyedropper.</div>
             </div>
         </div>
+        ''' if qr_img_b64 else ''}
+
+        {f'''
+        <div class="result-block">
+            <h2>Mockups</h2>
+            <div class="mockups">
+                <div>
+                    <div class="subhead">Business Card</div>
+                    <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
+                </div>
+                <div>
+                    <div class="subhead">Dome Sticker</div>
+                    <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
+                </div>
+            </div>
+        </div>
+        ''' if card_mockup_b64 and dome_mockup_b64 else ''}
     </div>
-    ''' if card_mockup_b64 and dome_mockup_b64 else ''}
-</div>
+</form>
 
 <script>
 const dropzone = document.getElementById("dropzone");
@@ -197,6 +303,68 @@ dropzone.addEventListener("drop", e => {{
         droptext.style.display = "none";
     }}
 }});
+
+const toggleBgToolsBtn = document.getElementById("toggle-bg-tools");
+const bgToolsPanel = document.getElementById("bg_tools_panel");
+const bgColorPicker = document.getElementById("bg_color_picker");
+const bgOverrideInput = document.getElementById("bg_override");
+const eyedropperBtn = document.getElementById("eyedropper_btn");
+const currentBgLabel = document.getElementById("current_bg_label");
+const currentBgSwatch = document.getElementById("current_bg_swatch");
+
+function normalizeHex(value) {{
+    if (!value) return "";
+    let v = value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-fA-F]{{6}}$/.test(v)) return v.toLowerCase();
+    return "";
+}}
+
+if (toggleBgToolsBtn && bgToolsPanel) {{
+    toggleBgToolsBtn.addEventListener("click", () => {{
+        bgToolsPanel.style.display = bgToolsPanel.style.display === "none" ? "block" : "none";
+    }});
+}}
+
+if (bgColorPicker && bgOverrideInput) {{
+    bgColorPicker.addEventListener("input", () => {{
+        bgOverrideInput.value = bgColorPicker.value;
+    }});
+
+    bgOverrideInput.addEventListener("input", () => {{
+        const hex = normalizeHex(bgOverrideInput.value);
+        if (hex) {{
+            bgColorPicker.value = hex;
+        }}
+    }});
+}}
+
+if (eyedropperBtn) {{
+    if (!("EyeDropper" in window)) {{
+        eyedropperBtn.disabled = true;
+        eyedropperBtn.title = "Eyedropper is not supported in this browser.";
+    }} else {{
+        eyedropperBtn.addEventListener("click", async () => {{
+            try {{
+                const eyeDropper = new EyeDropper();
+                const result = await eyeDropper.open();
+                if (result && result.sRGBHex) {{
+                    bgOverrideInput.value = result.sRGBHex.toLowerCase();
+                    bgColorPicker.value = result.sRGBHex.toLowerCase();
+                }}
+            }} catch (err) {{
+                // user cancelled
+            }}
+        }});
+    }}
+}}
+
+if (currentBgLabel && currentBgSwatch) {{
+    const currentHex = currentBgLabel.textContent.trim();
+    if (/^#[0-9a-fA-F]{{6}}$/.test(currentHex)) {{
+        currentBgSwatch.style.background = currentHex;
+    }}
+}}
 </script>
 
 </body>
@@ -217,6 +385,18 @@ def fetch_uploaded_image(file_storage):
         data = file_storage.read()
         if not data:
             return None
+        img = Image.open(BytesIO(data))
+        img.load()
+        return img.convert("RGBA")
+    except Exception:
+        return None
+
+
+def fetch_image_from_hidden_b64(art_data):
+    if not art_data:
+        return None
+    try:
+        data = base64.b64decode(art_data)
         img = Image.open(BytesIO(data))
         img.load()
         return img.convert("RGBA")
@@ -276,22 +456,18 @@ def build_sample_points(width, height):
         int(height * 0.18),
     ]
 
-    # top-left
     for x in corner_xs:
         for y in corner_ys:
             points.append((x, y))
 
-    # top-right
     for x in [int(width * 0.82), int(width * 0.92)]:
         for y in corner_ys:
             points.append((x, y))
 
-    # bottom-left
     for x in corner_xs:
         for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
 
-    # bottom-right
     for x in [int(width * 0.82), int(width * 0.92)]:
         for y in [int(height * 0.82), int(height * 0.92)]:
             points.append((x, y))
@@ -299,7 +475,11 @@ def build_sample_points(width, height):
     return points
 
 
-def choose_background_color(art):
+def choose_background_color(art, bg_override=None):
+    override_rgb = parse_hex_color(bg_override)
+    if override_rgb is not None:
+        return override_rgb
+
     if not art:
         return (255, 255, 255)
 
@@ -331,7 +511,7 @@ def choose_background_color(art):
     return winner
 
 
-def normalize_artwork_to_square(art, tolerance=0.12):
+def normalize_artwork_to_square(art, tolerance=0.12, bg_override=None):
     if not art:
         return None
 
@@ -341,11 +521,10 @@ def normalize_artwork_to_square(art, tolerance=0.12):
 
     ratio_diff = abs(w - h) / max(w, h)
 
-    # close enough to square: leave it alone
     if ratio_diff <= tolerance:
         return art
 
-    bg_color = choose_background_color(art)
+    bg_color = choose_background_color(art, bg_override=bg_override)
     square_size = max(w, h)
     square = Image.new("RGBA", (square_size, square_size), (*bg_color, 255))
 
@@ -440,13 +619,13 @@ def get_adaptive_dot_scale(complexity):
         return 0.54
 
 
-def generate_branded_qr(data, art=None):
+def generate_branded_qr(data, art=None, bg_override=None):
     qr = segno.make(data, error=ERROR_LEVEL)
     matrix = matrix_from_segno(qr)
     version = int(qr.version)
     n = len(matrix)
 
-    bg_color = choose_background_color(art)
+    bg_color = choose_background_color(art, bg_override=bg_override)
     dark_color = (0, 0, 0)
     light_color = (255, 255, 255)
 
@@ -550,15 +729,25 @@ def home():
     qr_b64 = None
     card_mockup_b64 = None
     dome_mockup_b64 = None
+    data_value = ""
+    art_data_b64 = ""
+    bg_override_value = ""
+    current_bg_hex = "#ffffff"
 
     if request.method == "POST":
-        data = (request.form.get("data") or "").strip()
-        art_file = request.files.get("artfile")
+        data_value = (request.form.get("data") or "").strip()
+        bg_override_value = (request.form.get("bg_override") or "").strip()
+        art_data_b64 = (request.form.get("art_data") or "").strip()
 
-        if data:
-            art = fetch_uploaded_image(art_file)
-            art = normalize_artwork_to_square(art)
-            qr_img = generate_branded_qr(data, art)
+        art_file = request.files.get("artfile")
+        art = fetch_uploaded_image(art_file)
+
+        if art is None and art_data_b64:
+            art = fetch_image_from_hidden_b64(art_data_b64)
+
+        if data_value:
+            art = normalize_artwork_to_square(art, bg_override=bg_override_value)
+            qr_img = generate_branded_qr(data_value, art, bg_override=bg_override_value)
 
             qr_b64 = image_to_base64(qr_img)
 
@@ -568,10 +757,19 @@ def home():
             card_mockup_b64 = image_to_base64(card_mockup)
             dome_mockup_b64 = image_to_base64(dome_mockup)
 
+            current_bg_hex = rgb_to_hex(qr_img.convert("RGB").getpixel((5, 5)))
+
+            if art is not None:
+                art_data_b64 = image_to_base64(art)
+
     return render_page(
         qr_img_b64=qr_b64,
         card_mockup_b64=card_mockup_b64,
         dome_mockup_b64=dome_mockup_b64,
+        data_value=data_value,
+        art_data_b64=art_data_b64,
+        bg_override_value=bg_override_value,
+        current_bg_hex=current_bg_hex,
     )
 
 
