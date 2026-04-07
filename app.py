@@ -331,6 +331,31 @@ def choose_background_color(art):
     return winner
 
 
+def normalize_artwork_to_square(art, tolerance=0.12):
+    if not art:
+        return None
+
+    w, h = art.size
+    if w == 0 or h == 0:
+        return art
+
+    ratio_diff = abs(w - h) / max(w, h)
+
+    # close enough to square: leave it alone
+    if ratio_diff <= tolerance:
+        return art
+
+    bg_color = choose_background_color(art)
+    square_size = max(w, h)
+    square = Image.new("RGBA", (square_size, square_size), (*bg_color, 255))
+
+    paste_x = (square_size - w) // 2
+    paste_y = (square_size - h) // 2
+    square.paste(art, (paste_x, paste_y), art)
+
+    return square
+
+
 def qr_size_from_version(version):
     return 17 + 4 * version
 
@@ -532,6 +557,7 @@ def home():
 
         if data:
             art = fetch_uploaded_image(art_file)
+            art = normalize_artwork_to_square(art)
             qr_img = generate_branded_qr(data, art)
 
             qr_b64 = image_to_base64(qr_img)
