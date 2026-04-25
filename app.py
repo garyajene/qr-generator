@@ -39,8 +39,7 @@ return None
 def rgb_
 to
 _hex(rgb):
-return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
-def image_
+return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])def image_
 to
 _base64(img):
 out = BytesIO()
@@ -90,8 +89,7 @@ def is
 near
 _
 _black(rgb):
-return rgb[0] <= 35 and rgb[1] <= 35 and rgb[2] <= 35
-def sample_region_average(img, x, y, radius=6):
+return rgb[0] <= 35 and rgb[1] <= 35 and rgb[2] <= 35def sample_region_average(img, x, y, radius=6):
 x0 = max(0, x - radius)
 y0 = max(0, y - radius)
 x1 = min(img.width, x + radius + 1)
@@ -134,8 +132,7 @@ int(height * 0.18),
 for x in corner
 xs:
 _
-for y in corner_ys:
-points.append((x, y))
+for y in corner_ys:points.append((x, y))
 for x in [int(width * 0.82), int(width * 0.92)]:
 for y in corner_ys:
 points.append((x, y))
@@ -180,8 +177,7 @@ count = most
 _common[0][1]
 tied
 _colors = [color for color, count in most_common if count == top_count]
-if len(tied_colors) == 1:
-winner = tied
+if len(tied_colors) == 1:winner = tied
 _colors[0]
 winner = tuple(max(0, min(255, c)) for c in winner)
 return winner
@@ -230,8 +226,7 @@ _
 _version(version)
 num = version // 7 + 2
 if num == 2:
-return [6, n - 7]
-step = (n - 13) // (num - 1)
+return [6, n - 7]step = (n - 13) // (num - 1)
 if step % 2 == 1:
 step += 1
 centers = [6]
@@ -289,8 +284,7 @@ format
 _
 _info(r, c, n)
 or in
-_alignment(r, c, version)
-)
+_alignment(r, c, version))
 def matrix
 from
 _
@@ -335,8 +329,7 @@ _color = (0, 0, 0)
 light_color = (255, 255, 255)
 size = (n + 2 * QUIET) * BOX
 canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
-draw = ImageDraw.Draw(canvas)
-dot
+draw = ImageDraw.Draw(canvas)dot
 scale = 0.48
 _
 if art:
@@ -383,8 +376,7 @@ def create
 dome
 _
 _only_qr(qr_img, output_size=900):
-bg_color = qr_img.convert("RGB").getpixel((5, 5))
-dome
+bg_color = qr_img.convert("RGB").getpixel((5, 5))dome
 _qr = Image.new("RGBA", (output_size, output_size), (*bg_color, 255))
 qr_x = (output_size - qr_img.width) // 2
 qr_y = (output_size - qr_img.height) // 2
@@ -441,8 +433,7 @@ _qr.resize((dome_w, dome_h), Image.LANCZOS)
 dome
 _base.alpha_composite(dome, (0, 0))
 final
-_w = int(dome_w * 0.50)
-final
+_w = int(dome_w * 0.50)final
 _h = int(dome_h * 0.50)
 return dome
 _base.resize((final_w, final_h), Image.LANCZOS)
@@ -509,8 +500,7 @@ margin-bottom: 8px;
 input[type="text"] {{
 width: 360px;
 padding: 10px;
-font-size: 16px;
-}}
+font-size: 16px;}}
 #dropzone {{
 width: 420px;
 height: 220px;
@@ -546,8 +536,7 @@ margin-top: 30px;
 .generated-qr {{
 max-width: 360px;
 height: auto;
-display: block;
-margin-top: 12px;
+display: block;margin-top: 12px;
 background: #fff;
 }}
 .mockups {{
@@ -584,8 +573,7 @@ border-radius: 10px;
 display: flex;
 align-items: center;
 gap: 12px;
-flex-wrap: wrap;
-}}
+flex-wrap: wrap;}}
 .bg-current-wrap {{
 display: inline-flex;
 align-items: center;
@@ -626,8 +614,7 @@ display: flex;
 justify-content: space-between;
 align-items: center;
 padding: 18px 20px;
-border-bottom: 1px solid #d7d7d7;
-background: #f5f5f5;
+border-bottom: 1px solid #d7d7d7;background: #f5f5f5;
 }}
 .picker-title {{
 font-size: 28px;
@@ -666,8 +653,7 @@ display: block;
 _knob {{
 position: absolute;
 width: 16px;
-height: 16px;
-border: 2px solid #fff;
+height: 16px;border: 2px solid #fff;
 border-radius: 50%;
 box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
 transform: translate(-8px, -8px);
@@ -707,8 +693,7 @@ display: block;
 _knob {{
 position: absolute;
 top: 50%;
-width: 16px;
-height: 16px;
+width: 16px;height: 16px;
 border: 3px solid #fff;
 border-radius: 50%;
 box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
@@ -744,8 +729,7 @@ font-size: 20px;
 .alpha-percent {{
 font-size: 20px;
 }}
-.alpha-wrap {{
-position: relative;
+.alpha-wrap {{position: relative;
 height: 12px;
 }}
 #alpha_slider {{
@@ -782,8 +766,7 @@ margin-top: 26px;
 padding-top: 18px;
 border-top: 1px solid #d7d7d7;
 font-size: 18px;
-font-weight: 500;
-}}
+font-weight: 500;}}
 .doc-colors {{
 display: flex;
 gap: 14px;
@@ -819,8 +802,7 @@ font-size: 22px;
 .alpha-percent {{
 font-size: 18px;
 }}
-}}
-</style>
+}}</style>
 </head>
 <body>
 <h1>QR Generator</h1>
@@ -867,8 +849,7 @@ Color</button>
 current
 _bg_hex}</span>
 </span>
-</div>
-<div id="bg_
+</div><div id="bg_
 tools
 _panel">
 <div class="picker-dialog">
@@ -922,8 +903,7 @@ current
 _
 _
 _bg_hex}">
-<div class="lab">HEX</div>
-</div>
+<div class="lab">HEX</div></div>
 <div class="value-box">
 <input type="text" id="r_
 val" value="255">
@@ -967,8 +947,7 @@ Color</button>
 <div class="result-block">
 <h2>Mockups</h2>
 <div class="mockups">
-<div>
-<div class="subhead">Business Card</div>
+<div><div class="subhead">Business Card</div>
 <img class="mockup-card" src="data:image/png;base64,
 {card_mockup_b64}">
 </div>
@@ -1009,8 +988,7 @@ reader.readAsDataURL(file);
 }}
 fileInput.onchange = () => {{
 const file = fileInput.files[0];
-if (file) {{
-loadFileIntoPreview(file);
+if (file) {{loadFileIntoPreview(file);
 }}
 }};
 dropzone.addEventListener("dragover", e => {{
@@ -1051,8 +1029,7 @@ const hueCanvas = document.getElementById("hue_canvas");
 const hueWrap = document.getElementById("hue_wrap");
 const hueKnob = document.getElementById("hue_knob");
 let hue = 340;
-let sat = 1;
-let val = 1;
+let sat = 1;let val = 1;
 let alpha = 1;
 function normalizeHex(value) {{
 if (!value) return "";
@@ -1088,8 +1065,7 @@ g: Math.round((g1 + m) * 255),
 b: Math.round((b1 + m) * 255)
 }};
 }}
-function rgbToHex(r, g, b) {{
-const toHex = (n) => n.toString(16).padStart(2, "0");
+function rgbToHex(r, g, b) {{const toHex = (n) => n.toString(16).padStart(2, "0");
 return "#" + toHex(r) + toHex(g) + toHex(b);
 }}
 function hexToRgb(hex) {{
@@ -1125,8 +1101,7 @@ break;
 }}
 }}
 if (h < 0) h += 360;
-return {{ h, s, v }};
-}}
+return {{ h, s, v }};}}
 function drawHueSlider() {{
 if (!hueCanvas) return;
 const ctx = hueCanvas.getContext("2d");
@@ -1161,8 +1136,7 @@ ctx.fillRect(0, 0, w, h);
 const blackGrad = ctx.createLinearGradient(0, 0, 0, h);
 blackGrad.addColorStop(0, "rgba(0,0,0,0)");
 blackGrad.addColorStop(1, "rgba(0,0,0,1)");
-ctx.fillStyle = blackGrad;
-ctx.fillRect(0, 0, w, h);
+ctx.fillStyle = blackGrad;ctx.fillRect(0, 0, w, h);
 }}
 function updateKnobs() {{
 if (svWrap && svKnob) {{
@@ -1198,8 +1172,7 @@ updateVisualsFromHSV();
 }}
 function handleSVPointer(clientX, clientY) {{
 const rect = svWrap.getBoundingClientRect();
-const x = clamp(clientX - rect.left, 0, rect.width);
-const y = clamp(clientY - rect.top, 0, rect.height);
+const x = clamp(clientX - rect.left, 0, rect.width);const y = clamp(clientY - rect.top, 0, rect.height);
 sat = x / rect.width;
 val = 1 - (y / rect.height);
 updateVisualsFromHSV();
@@ -1233,8 +1206,7 @@ e.preventDefault();
 window.addEventListener("touchmove", (e) => {{
 if (!dragging) return;
 const t = e.touches[0];
-moveHandler(t.clientX, t.clientY);
-e.preventDefault();
+moveHandler(t.clientX, t.clientY);e.preventDefault();
 }}, {{ passive: false }});
 window.addEventListener("touchend", () => {{
 dragging = false;
@@ -1270,8 +1242,7 @@ btn.addEventListener("click", () => {{
 const color = btn.getAttribute("data-color");
 setFromHex(color);
 }});
-}});
-if (eyedropperBtn) {{
+}});if (eyedropperBtn) {{
 if (!("EyeDropper" in window)) {{
 eyedropperBtn.disabled = true;
 eyedropperBtn.title = "Pick From Image is not supported in this browser.";
@@ -1310,8 +1281,7 @@ qr_
 b64 = None
 card
 _mockup_
-b64 = None
-dome
+b64 = Nonedome
 _mockup_
 b64 = None
 data
@@ -1435,8 +1405,7 @@ _value,
 current
 _bg_
 hex=current
-_bg_hex,
-if
+_bg_hex,if
 )
 name
 == "
