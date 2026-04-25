@@ -514,20 +514,16 @@ def render_page(
     art_data_b64="",
     bg_override_value="",
     current_bg_hex="#ffffff",
-    qr_style="branded",
+    qr_style="artistic",
 ):
     safe_data_value = html.escape(data_value or "")
     safe_art_data_b64 = html.escape(art_data_b64 or "")
     safe_bg_override_value = html.escape(bg_override_value or "")
     safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
-    safe_qr_style = (qr_style or "branded").strip().lower()
-    if safe_qr_style == "artistic":
-        safe_qr_style = "branded"
-    if safe_qr_style not in ("simple", "branded"):
-        safe_qr_style = "branded"
+    safe_qr_style = (qr_style or "artistic").strip().lower()
 
-    simple_active = "active" if safe_qr_style == "simple" else ""
-    branded_active = "active" if safe_qr_style == "branded" else ""
+    artistic_selected = "active" if safe_qr_style == "artistic" else ""
+    simple_selected = "active" if safe_qr_style == "simple" else ""
 
     return f"""
 <!doctype html>
@@ -551,7 +547,7 @@ h1 {{
     margin-bottom: 8px;
 }}
 
-input[type="text"], select {{
+input[type="text"] {{
     width: 360px;
     padding: 10px;
     font-size: 16px;
@@ -559,65 +555,43 @@ input[type="text"], select {{
 
 .qr-type-options {{
     display: flex;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
-    margin: 10px 0 18px 0;
-    max-width: 640px;
+    margin: 8px 0 22px 0;
 }}
 
 .qr-type-card {{
-    width: 245px;
-    min-height: 78px;
-    border: 2px solid #d9d9d9;
+    width: 190px;
+    min-height: 86px;
+    border: 2px solid #d0d0d0;
     border-radius: 14px;
     background: #ffffff;
-    cursor: pointer;
-    padding: 16px 18px;
+    padding: 16px;
     text-align: left;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}}
+
+.qr-type-card:hover {{
+    border-color: #777;
 }}
 
 .qr-type-card.active {{
-    border: 3px solid #000000;
-}}
-
-.qr-type-card-title {{
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}}
-
-.qr-type-card-subtitle {{
-    font-size: 13px;
-    line-height: 1.25;
-    color: #666666;
-}}
-
-.qr-type-check {{
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid #dedede;
-    flex: 0 0 auto;
-}}
-
-.qr-type-card.active .qr-type-check {{
-    background: #000000;
     border-color: #000000;
-    position: relative;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
+    background: #f7f7f7;
 }}
 
-.qr-type-card.active .qr-type-check::after {{
-    content: "✓";
-    color: #ffffff;
-    font-size: 15px;
-    font-weight: 700;
-    position: absolute;
-    left: 5px;
-    top: 1px;
+.qr-type-title {{
+    font-size: 17px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}}
+
+.qr-type-desc {{
+    font-size: 13px;
+    line-height: 1.35;
+    color: #555;
 }}
 
 #dropzone {{
@@ -980,25 +954,17 @@ button {{
     <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
 
     <div class="label">QR Type</div>
+    <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
     <div class="qr-type-options">
-        <button type="button" id="simple_qr_card" class="qr-type-card {simple_active}" onclick="selectQRType('simple')">
-            <span>
-                <span class="qr-type-card-title">Simple QR</span><br>
-                <span class="qr-type-card-subtitle">Clean black QR with logo</span>
-            </span>
-            <span class="qr-type-check"></span>
+        <button type="button" id="simple_qr_card" class="qr-type-card {simple_selected}" onclick="selectQRStyle('simple')">
+            <div class="qr-type-title">Simple QR</div>
+            <div class="qr-type-desc">Clean black QR code with your logo in the center.</div>
         </button>
-
-        <button type="button" id="branded_qr_card" class="qr-type-card {branded_active}" onclick="selectQRType('branded')">
-            <span>
-                <span class="qr-type-card-title">Branded QR</span><br>
-                <span class="qr-type-card-subtitle">Custom design with your artwork</span>
-            </span>
-            <span class="qr-type-check"></span>
+        <button type="button" id="branded_qr_card" class="qr-type-card {artistic_selected}" onclick="selectQRStyle('artistic')">
+            <div class="qr-type-title">Branded QR</div>
+            <div class="qr-type-desc">Custom logo-driven QR code using your artwork and colors.</div>
         </button>
     </div>
-    <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
-    <br>
 
     <div class="label">Upload Artwork (optional)</div>
     <div id="dropzone">
@@ -1122,24 +1088,21 @@ button {{
 </form>
 
 <script>
-function selectQRType(type) {{
+function selectQRStyle(style) {{
     const qrStyleInput = document.getElementById("qr_style");
     const simpleCard = document.getElementById("simple_qr_card");
     const brandedCard = document.getElementById("branded_qr_card");
 
     if (qrStyleInput) {{
-        qrStyleInput.value = type;
+        qrStyleInput.value = style;
     }}
 
-    if (simpleCard && brandedCard) {{
-        simpleCard.classList.remove("active");
-        brandedCard.classList.remove("active");
+    if (simpleCard) {{
+        simpleCard.classList.toggle("active", style === "simple");
+    }}
 
-        if (type === "simple") {{
-            simpleCard.classList.add("active");
-        }} else {{
-            brandedCard.classList.add("active");
-        }}
+    if (brandedCard) {{
+        brandedCard.classList.toggle("active", style === "artistic");
     }}
 }}
 
@@ -1527,17 +1490,13 @@ def home():
     art_data_b64 = ""
     bg_override_value = ""
     current_bg_hex = "#ffffff"
-    qr_style = "branded"
+    qr_style = "artistic"
 
     if request.method == "POST":
         data_value = (request.form.get("data") or "").strip()
         bg_override_value = (request.form.get("bg_override") or "").strip()
         art_data_b64 = (request.form.get("art_data") or "").strip()
-        qr_style = (request.form.get("qr_style") or "branded").strip().lower()
-        if qr_style == "artistic":
-            qr_style = "branded"
-        if qr_style not in ("simple", "branded"):
-            qr_style = "branded"
+        qr_style = (request.form.get("qr_style") or "artistic").strip().lower()
 
         art_file = request.files.get("artfile")
         art = fetch_uploaded_image(art_file)
