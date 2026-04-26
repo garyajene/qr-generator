@@ -376,104 +376,54 @@ def draw_simple_finder(draw, x, y, module_box, stroke_color, fill_color):
 
 
 def generate_simple_qr(data, logo=None):
+    """
+    Simple QR must stay scanner-safe.
+    This uses Segno's standard renderer for the QR itself, then places a small
+    logo badge in the center. It does not manually redraw the QR matrix.
+    """
     qr = segno.make(data, error=ERROR_LEVEL)
-    matrix = matrix_from_segno(qr)
-    version = int(qr.version)
-    n = len(matrix)
 
-    # Use the same global BOX and QUIET sizing as the branded QR.
-    # This keeps the QR aligned with the existing mockup crop system.
-    module_box = BOX
-    quiet = QUIET
-    size = (n + quiet * 2) * module_box
+    out = BytesIO()
+    qr.save(
+        out,
+        kind="png",
+        scale=BOX,
+        border=QUIET,
+        dark="black",
+        light="white",
+    )
+    out.seek(0)
 
-    img = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+    img = Image.open(out).convert("RGBA")
     draw = ImageDraw.Draw(img)
-
-    black = (0, 0, 0, 255)
-    white = (255, 255, 255, 255)
-
-    def module_rect(r, c):
-        x0 = (quiet + c) * module_box
-        y0 = (quiet + r) * module_box
-        x1 = x0 + module_box
-        y1 = y0 + module_box
-        return x0, y0, x1, y1
-
-    def draw_data_dot(r, c):
-        x0, y0, x1, y1 = module_rect(r, c)
-        pad = module_box * 0.18
-        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=black)
-
-    def draw_finder_at(r, c):
-        x0 = (quiet + c) * module_box
-        y0 = (quiet + r) * module_box
-        x1 = x0 + 7 * module_box
-        y1 = y0 + 7 * module_box
-
-        radius = max(6, int(module_box * 1.15))
-        stroke_w = max(3, int(module_box * 0.70))
-
-        draw.rounded_rectangle(
-            [x0, y0, x1, y1],
-            radius=radius,
-            outline=black,
-            width=stroke_w,
-            fill=white,
-        )
-
-        cx = x0 + 3.5 * module_box
-        cy = y0 + 3.5 * module_box
-        center_radius = module_box * 1.25
-        draw.ellipse(
-            [
-                cx - center_radius,
-                cy - center_radius,
-                cx + center_radius,
-                cy + center_radius,
-            ],
-            fill=black,
-        )
-
-    for r in range(n):
-        for c in range(n):
-            if not matrix[r][c]:
-                continue
-            if is_protected(r, c, n, version):
-                continue
-            draw_data_dot(r, c)
-
-    draw_finder_at(0, 0)
-    draw_finder_at(0, n - 7)
-    draw_finder_at(n - 7, 0)
 
     if logo:
         logo = logo.convert("RGBA")
 
-        max_logo_side = int(size * 0.16)
+        # Keep the logo conservative so error correction can still recover.
+        max_logo_side = int(img.width * 0.14)
         logo.thumbnail((max_logo_side, max_logo_side), Image.LANCZOS)
 
-        pad = max(8, int(size * 0.018))
+        pad = max(8, int(img.width * 0.018))
         badge_w = logo.width + pad * 2
         badge_h = logo.height + pad * 2
 
-        badge_x0 = (size - badge_w) // 2
-        badge_y0 = (size - badge_h) // 2
+        badge_x0 = (img.width - badge_w) // 2
+        badge_y0 = (img.height - badge_h) // 2
         badge_x1 = badge_x0 + badge_w
         badge_y1 = badge_y0 + badge_h
 
         draw.rounded_rectangle(
             [badge_x0, badge_y0, badge_x1, badge_y1],
             radius=max(8, pad),
-            fill=white,
+            fill=(255, 255, 255, 255),
         )
 
-        logo_x = (size - logo.width) // 2
-        logo_y = (size - logo.height) // 2
+        logo_x = (img.width - logo.width) // 2
+        logo_y = (img.height - logo.height) // 2
         img.paste(logo, (logo_x, logo_y), logo)
 
     return img
-
 
 def create_dome_only_qr(qr_img, output_size=900):
     bg_color = qr_img.convert("RGB").getpixel((5, 5))
@@ -533,20 +483,16 @@ def render_page(
     art_data_b64="",
     bg_override_value="",
     current_bg_hex="#ffffff",
-    qr_style="branded",
+    qr_style="artistic",
 ):
     safe_data_value = html.escape(data_value or "")
     safe_art_data_b64 = html.escape(art_data_b64 or "")
     safe_bg_override_value = html.escape(bg_override_value or "")
     safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
-    safe_qr_style = (qr_style or "branded").strip().lower()
-    if safe_qr_style == "artistic":
-        safe_qr_style = "branded"
-    if safe_qr_style not in ("simple", "branded"):
-        safe_qr_style = "branded"
+    safe_qr_style = (qr_style or "artistic").strip().lower()
 
-    simple_active = "active" if safe_qr_style == "simple" else ""
-    branded_active = "active" if safe_qr_style == "branded" else ""
+    artistic_selected = "active" if safe_qr_style == "artistic" else ""
+    simple_selected = "active" if safe_qr_style == "simple" else ""
 
     return f"""
 <!doctype html>
@@ -570,7 +516,7 @@ h1 {{
     margin-bottom: 8px;
 }}
 
-input[type="text"], select {{
+input[type="text"] {{
     width: 360px;
     padding: 10px;
     font-size: 16px;
@@ -578,65 +524,43 @@ input[type="text"], select {{
 
 .qr-type-options {{
     display: flex;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
-    margin: 10px 0 18px 0;
-    max-width: 640px;
+    margin: 8px 0 22px 0;
 }}
 
 .qr-type-card {{
-    width: 245px;
-    min-height: 78px;
-    border: 2px solid #d9d9d9;
+    width: 190px;
+    min-height: 86px;
+    border: 2px solid #d0d0d0;
     border-radius: 14px;
     background: #ffffff;
-    cursor: pointer;
-    padding: 16px 18px;
+    padding: 16px;
     text-align: left;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}}
+
+.qr-type-card:hover {{
+    border-color: #777;
 }}
 
 .qr-type-card.active {{
-    border: 3px solid #000000;
-}}
-
-.qr-type-card-title {{
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}}
-
-.qr-type-card-subtitle {{
-    font-size: 13px;
-    line-height: 1.25;
-    color: #666666;
-}}
-
-.qr-type-check {{
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid #dedede;
-    flex: 0 0 auto;
-}}
-
-.qr-type-card.active .qr-type-check {{
-    background: #000000;
     border-color: #000000;
-    position: relative;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
+    background: #f7f7f7;
 }}
 
-.qr-type-card.active .qr-type-check::after {{
-    content: "✓";
-    color: #ffffff;
-    font-size: 15px;
-    font-weight: 700;
-    position: absolute;
-    left: 5px;
-    top: 1px;
+.qr-type-title {{
+    font-size: 17px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}}
+
+.qr-type-desc {{
+    font-size: 13px;
+    line-height: 1.35;
+    color: #555;
 }}
 
 #dropzone {{
@@ -999,25 +923,17 @@ button {{
     <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
 
     <div class="label">QR Type</div>
+    <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
     <div class="qr-type-options">
-        <button type="button" id="simple_qr_card" class="qr-type-card {simple_active}" onclick="selectQRType('simple')">
-            <span>
-                <span class="qr-type-card-title">Simple QR</span><br>
-                <span class="qr-type-card-subtitle">Clean black QR with logo</span>
-            </span>
-            <span class="qr-type-check"></span>
+        <button type="button" id="simple_qr_card" class="qr-type-card {simple_selected}" onclick="selectQRStyle('simple')">
+            <div class="qr-type-title">Simple QR</div>
+            <div class="qr-type-desc">Clean black QR code with your logo in the center.</div>
         </button>
-
-        <button type="button" id="branded_qr_card" class="qr-type-card {branded_active}" onclick="selectQRType('branded')">
-            <span>
-                <span class="qr-type-card-title">Branded QR</span><br>
-                <span class="qr-type-card-subtitle">Custom design with your artwork</span>
-            </span>
-            <span class="qr-type-check"></span>
+        <button type="button" id="branded_qr_card" class="qr-type-card {artistic_selected}" onclick="selectQRStyle('artistic')">
+            <div class="qr-type-title">Branded QR</div>
+            <div class="qr-type-desc">Custom logo-driven QR code using your artwork and colors.</div>
         </button>
     </div>
-    <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
-    <br>
 
     <div class="label">Upload Artwork (optional)</div>
     <div id="dropzone">
@@ -1141,24 +1057,21 @@ button {{
 </form>
 
 <script>
-function selectQRType(type) {{
+function selectQRStyle(style) {{
     const qrStyleInput = document.getElementById("qr_style");
     const simpleCard = document.getElementById("simple_qr_card");
     const brandedCard = document.getElementById("branded_qr_card");
 
     if (qrStyleInput) {{
-        qrStyleInput.value = type;
+        qrStyleInput.value = style;
     }}
 
-    if (simpleCard && brandedCard) {{
-        simpleCard.classList.remove("active");
-        brandedCard.classList.remove("active");
+    if (simpleCard) {{
+        simpleCard.classList.toggle("active", style === "simple");
+    }}
 
-        if (type === "simple") {{
-            simpleCard.classList.add("active");
-        }} else {{
-            brandedCard.classList.add("active");
-        }}
+    if (brandedCard) {{
+        brandedCard.classList.toggle("active", style === "artistic");
     }}
 }}
 
@@ -1546,17 +1459,13 @@ def home():
     art_data_b64 = ""
     bg_override_value = ""
     current_bg_hex = "#ffffff"
-    qr_style = "branded"
+    qr_style = "artistic"
 
     if request.method == "POST":
         data_value = (request.form.get("data") or "").strip()
         bg_override_value = (request.form.get("bg_override") or "").strip()
         art_data_b64 = (request.form.get("art_data") or "").strip()
-        qr_style = (request.form.get("qr_style") or "branded").strip().lower()
-        if qr_style == "artistic":
-            qr_style = "branded"
-        if qr_style not in ("simple", "branded"):
-            qr_style = "branded"
+        qr_style = (request.form.get("qr_style") or "artistic").strip().lower()
 
         art_file = request.files.get("artfile")
         art = fetch_uploaded_image(art_file)
