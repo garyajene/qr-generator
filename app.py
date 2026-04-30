@@ -376,54 +376,85 @@ def draw_simple_finder(draw, x, y, module_box, stroke_color, fill_color):
 
 
 def generate_simple_qr(data, logo=None):
-    """
-    Simple QR must stay scanner-safe.
-    This uses Segno's standard renderer for the QR itself, then places a small
-    logo badge in the center. It does not manually redraw the QR matrix.
-    """
     qr = segno.make(data, error=ERROR_LEVEL)
+    matrix = matrix_from_segno(qr)
+    version = int(qr.version)
+    n = len(matrix)
 
-    out = BytesIO()
-    qr.save(
-        out,
-        kind="png",
-        scale=BOX,
-        border=QUIET,
-        dark="black",
-        light="white",
-    )
-    out.seek(0)
+    module_box = 10
+    margin = 2
+    size = (n + margin * 2 + 1) * module_box
 
-    img = Image.open(out).convert("RGBA")
+    img = Image.new("RGBA", (size, size), (255, 255, 255, 255))
     draw = ImageDraw.Draw(img)
+
+    black = (0, 0, 0, 255)
+
+    draw_simple_finder(
+        draw,
+        0,
+        0,
+        module_box,
+        black,
+        black,
+    )
+    draw_simple_finder(
+        draw,
+        0,
+        size - (8 + margin) * module_box,
+        module_box,
+        black,
+        black,
+    )
+    draw_simple_finder(
+        draw,
+        size - (8 + margin) * module_box,
+        0,
+        module_box,
+        black,
+        black,
+    )
+
+    for r in range(n):
+        for c in range(n):
+            if is_protected(r, c, n, version):
+                continue
+
+            if matrix[r][c]:
+                cx = (c + 1 + margin) * module_box
+                cy = (r + 1 + margin) * module_box
+                radius = module_box / 2
+                draw.ellipse(
+                    [cx - radius, cy - radius, cx + radius, cy + radius],
+                    fill=black,
+                )
 
     if logo:
         logo = logo.convert("RGBA")
-
-        # Keep the logo conservative so error correction can still recover.
-        max_logo_side = int(img.width * 0.14)
+        max_logo_side = int(size * 0.20)
         logo.thumbnail((max_logo_side, max_logo_side), Image.LANCZOS)
 
-        pad = max(8, int(img.width * 0.018))
+        pad = max(10, int(size * 0.02))
         badge_w = logo.width + pad * 2
         badge_h = logo.height + pad * 2
 
-        badge_x0 = (img.width - badge_w) // 2
-        badge_y0 = (img.height - badge_h) // 2
+        badge_x0 = (size - badge_w) // 2
+        badge_y0 = (size - badge_h) // 2
         badge_x1 = badge_x0 + badge_w
         badge_y1 = badge_y0 + badge_h
 
         draw.rounded_rectangle(
             [badge_x0, badge_y0, badge_x1, badge_y1],
-            radius=max(8, pad),
+            radius=max(10, pad),
             fill=(255, 255, 255, 255),
         )
 
-        logo_x = (img.width - logo.width) // 2
-        logo_y = (img.height - logo.height) // 2
+        logo_x = (size - logo.width) // 2
+        logo_y = (size - logo.height) // 2
         img.paste(logo, (logo_x, logo_y), logo)
 
     return img
+
 
 def create_dome_only_qr(qr_img, output_size=900):
     bg_color = qr_img.convert("RGB").getpixel((5, 5))
@@ -491,8 +522,8 @@ def render_page(
     safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
     safe_qr_style = (qr_style or "artistic").strip().lower()
 
-    artistic_selected = "active" if safe_qr_style == "artistic" else ""
-    simple_selected = "active" if safe_qr_style == "simple" else ""
+    artistic_selected = "selected" if safe_qr_style == "artistic" else ""
+    simple_selected = "selected" if safe_qr_style == "simple" else ""
 
     return f"""
 <!doctype html>
@@ -516,51 +547,10 @@ h1 {{
     margin-bottom: 8px;
 }}
 
-input[type="text"] {{
+input[type="text"], select {{
     width: 360px;
     padding: 10px;
     font-size: 16px;
-}}
-
-.qr-type-options {{
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin: 8px 0 22px 0;
-}}
-
-.qr-type-card {{
-    width: 190px;
-    min-height: 86px;
-    border: 2px solid #d0d0d0;
-    border-radius: 14px;
-    background: #ffffff;
-    padding: 16px;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-}}
-
-.qr-type-card:hover {{
-    border-color: #777;
-}}
-
-.qr-type-card.active {{
-    border-color: #000000;
-    box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
-    background: #f7f7f7;
-}}
-
-.qr-type-title {{
-    font-size: 17px;
-    font-weight: bold;
-    margin-bottom: 6px;
-}}
-
-.qr-type-desc {{
-    font-size: 13px;
-    line-height: 1.35;
-    color: #555;
 }}
 
 #dropzone {{
@@ -922,18 +912,11 @@ button {{
     <div class="label">QR Data</div>
     <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
 
-    <div class="label">QR Type</div>
-    <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
-    <div class="qr-type-options">
-        <button type="button" id="simple_qr_card" class="qr-type-card {simple_selected}" onclick="selectQRStyle('simple')">
-            <div class="qr-type-title">Simple QR</div>
-            <div class="qr-type-desc">Clean black QR code with your logo in the center.</div>
-        </button>
-        <button type="button" id="branded_qr_card" class="qr-type-card {artistic_selected}" onclick="selectQRStyle('artistic')">
-            <div class="qr-type-title">Branded QR</div>
-            <div class="qr-type-desc">Custom logo-driven QR code using your artwork and colors.</div>
-        </button>
-    </div>
+    <div class="label">QR Style</div>
+    <select name="qr_style">
+        <option value="artistic" {artistic_selected}>Artistic QR</option>
+        <option value="simple" {simple_selected}>Simple QR</option>
+    </select><br><br>
 
     <div class="label">Upload Artwork (optional)</div>
     <div id="dropzone">
@@ -1057,24 +1040,6 @@ button {{
 </form>
 
 <script>
-function selectQRStyle(style) {{
-    const qrStyleInput = document.getElementById("qr_style");
-    const simpleCard = document.getElementById("simple_qr_card");
-    const brandedCard = document.getElementById("branded_qr_card");
-
-    if (qrStyleInput) {{
-        qrStyleInput.value = style;
-    }}
-
-    if (simpleCard) {{
-        simpleCard.classList.toggle("active", style === "simple");
-    }}
-
-    if (brandedCard) {{
-        brandedCard.classList.toggle("active", style === "artistic");
-    }}
-}}
-
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("artfile");
 const preview = document.getElementById("preview");
@@ -1411,24 +1376,83 @@ docSwatches.forEach(btn => {{
     }});
 }});
 
-if (eyedropperBtn) {{
-    if (!("EyeDropper" in window)) {{
-        eyedropperBtn.disabled = true;
-        eyedropperBtn.title = "Pick From Image is not supported in this browser.";
-    }} else {{
-        eyedropperBtn.addEventListener("click", async () => {{
-            try {{
-                const eyeDropper = new EyeDropper();
-                const result = await eyeDropper.open();
-                if (result && result.sRGBHex) {{
-                    setFromHex(result.sRGBHex.toLowerCase());
-                }}
-            }} catch (err) {{
-                // user cancelled
-            }}
-        }});
+let imagePickMode = false;
+
+function sampleColorFromDisplayedImage(imgEl, clientX, clientY) {{
+    if (!imgEl || !imgEl.src) return null;
+
+    const rect = imgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    const naturalWidth = imgEl.naturalWidth || imgEl.width;
+    const naturalHeight = imgEl.naturalHeight || imgEl.height;
+    if (!naturalWidth || !naturalHeight) return null;
+
+    const x = Math.floor(((clientX - rect.left) / rect.width) * naturalWidth);
+    const y = Math.floor(((clientY - rect.top) / rect.height) * naturalHeight);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = naturalWidth;
+    canvas.height = naturalHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(imgEl, 0, 0, naturalWidth, naturalHeight);
+
+    const pixel = ctx.getImageData(
+        clamp(x, 0, naturalWidth - 1),
+        clamp(y, 0, naturalHeight - 1),
+        1,
+        1
+    ).data;
+
+    return rgbToHex(pixel[0], pixel[1], pixel[2]);
+}}
+
+function startImagePickMode() {{
+    imagePickMode = true;
+    if (eyedropperBtn) {{
+        eyedropperBtn.textContent = "Click Image";
+        eyedropperBtn.title = "Click the generated QR, card mockup, dome mockup, or uploaded preview to pick a color.";
     }}
 }}
+
+function stopImagePickMode() {{
+    imagePickMode = false;
+    if (eyedropperBtn) {{
+        eyedropperBtn.textContent = "Pick From Image";
+        eyedropperBtn.title = "";
+    }}
+}}
+
+if (eyedropperBtn) {{
+    eyedropperBtn.addEventListener("click", (e) => {{
+        e.preventDefault();
+        startImagePickMode();
+    }});
+}}
+
+document.addEventListener("click", (e) => {{
+    if (!imagePickMode) return;
+
+    const target = e.target;
+    const canPickFrom = target && target.matches && target.matches(".generated-qr, .mockup-card, .mockup-dome, #preview");
+
+    if (!canPickFrom) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {{
+        const pickedHex = sampleColorFromDisplayedImage(target, e.clientX, e.clientY);
+        if (pickedHex) {{
+            setFromHex(pickedHex);
+        }}
+    }} catch (err) {{
+        // If sampling fails, leave the current color unchanged.
+    }}
+
+    stopImagePickMode();
+}}, true);
 
 wirePointerDrag(svWrap, handleSVPointer);
 wirePointerDrag(hueWrap, (x) => handleHuePointer(x));
