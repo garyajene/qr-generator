@@ -601,6 +601,21 @@ button {{
     margin-top: 30px;
 }}
 
+.preview-and-mockups {{
+    display: flex;
+    gap: 42px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}}
+
+.preview-column {{
+    flex: 0 0 auto;
+}}
+
+.mockups-result {{
+    margin-top: 30px;
+}}
+
 .generated-qr {{
     max-width: 360px;
     height: auto;
@@ -968,9 +983,32 @@ button {{
 
     <div class="results">
         {f'''
-        <div class="result-block">
-            <h2>Generated QR</h2>
-            <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}">
+        <div class="preview-and-mockups">
+            <div class="preview-column">
+                <div class="result-block">
+                    <h2>Generated QR</h2>
+                    <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}" alt="Click the QR image to sample a color.">
+                </div>
+            </div>
+        ''' if qr_img_b64 else ''}
+
+        {f'''
+            <div class="result-block mockups-result">
+                <h2>Mockups</h2>
+                <div class="mockups">
+                    <div>
+                        <div class="subhead">Business Card</div>
+                        <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
+                    </div>
+                    <div>
+                        <div class="subhead">Dome Sticker</div>
+                        <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
+                    </div>
+                </div>
+            </div>
+        ''' if card_mockup_b64 and dome_mockup_b64 else ''}
+
+        {'''
         </div>
         ''' if qr_img_b64 else ''}
 
@@ -1060,22 +1098,6 @@ button {{
             </div>
         </div>
         ''' if qr_img_b64 else ''}
-
-        {f'''
-        <div class="result-block">
-            <h2>Mockups</h2>
-            <div class="mockups">
-                <div>
-                    <div class="subhead">Business Card</div>
-                    <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
-                </div>
-                <div>
-                    <div class="subhead">Dome Sticker</div>
-                    <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
-                </div>
-            </div>
-        </div>
-        ''' if card_mockup_b64 and dome_mockup_b64 else ''}
     </div>
 </form>
 
