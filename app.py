@@ -862,6 +862,26 @@ button {{
     font-size: 15px;
 }}
 
+
+.hex-preview-row {{
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}}
+
+.hex-preview-row .value-box {{
+    min-width: 180px;
+}}
+
+.large-picked-color {{
+    width: 170px;
+    height: 42px;
+    border: 1px solid #111;
+    border-radius: 4px;
+    background: {safe_current_bg_hex};
+    margin-top: 0;
+}}
+
 .doc-colors-title {{
     margin-top: 26px;
     padding-top: 18px;
@@ -1001,9 +1021,12 @@ button {{
                         <div class="small-note">Tip: click directly on the generated QR image to sample a color.</div>
 
                         <div class="values-row">
-                            <div class="value-box">
-                                <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}">
-                                <div class="lab">HEX</div>
+                            <div class="hex-preview-row">
+                                <div class="value-box">
+                                    <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}">
+                                    <div class="lab">HEX</div>
+                                </div>
+                                <div id="large_picked_color" class="large-picked-color" title="Selected color preview"></div>
                             </div>
 
                             <div class="value-box">
@@ -1131,6 +1154,7 @@ const bgToolsPanel = document.getElementById("bg_tools_panel");
 const pickerCloseBtn = document.getElementById("picker_close_btn");
 const currentBgLabel = document.getElementById("current_bg_label");
 const currentBgSwatch = document.getElementById("current_bg_swatch");
+const largePickedColor = document.getElementById("large_picked_color");
 const bgOverrideInput = document.getElementById("bg_override");
 const rVal = document.getElementById("r_val");
 const gVal = document.getElementById("g_val");
@@ -1301,6 +1325,7 @@ function updateVisualsFromHSV() {{
     if (bgOverrideInput) bgOverrideInput.value = hex;
     if (currentBgLabel) currentBgLabel.textContent = hex;
     if (currentBgSwatch) currentBgSwatch.style.background = hex;
+    if (largePickedColor) largePickedColor.style.background = hex;
     if (rVal) rVal.value = rgb.r;
     if (gVal) gVal.value = rgb.g;
     if (bVal) bVal.value = rgb.b;
