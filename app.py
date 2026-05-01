@@ -1330,6 +1330,8 @@ function updateVisualsFromHSV() {{
     if (gVal) gVal.value = rgb.g;
     if (bVal) bVal.value = rgb.b;
 
+    scheduleGeneratedQrLivePreview(hex);
+
     drawSVBox();
     updateKnobs();
 }}
@@ -1436,6 +1438,122 @@ docSwatches.forEach(btn => {{
 }});
 
 const generatedQrImage = document.querySelector(".generated-qr");
+let originalGeneratedQrSrc = generatedQrImage ? generatedQrImage.src : "";
+let pendingPreviewHex = null;
+let previewFrameRequested = false;
+
+function colorDistanceRgb(r1, g1, b1, r2, g2, b2) {{
+    return Math.sqrt(
+        Math.pow(r1 - r2, 2) +
+        Math.pow(g1 - g2, 2) +
+        Math.pow(b1 - b2, 2)
+    );
+}}
+
+function scheduleGeneratedQrLivePreview(hex) {{
+    if (!generatedQrImage || !originalGeneratedQrSrc) return;
+
+    const cleanHex = normalizeHex(hex);
+    if (!cleanHex) return;
+
+    pendingPreviewHex = cleanHex;
+
+    if (previewFrameRequested) return;
+
+    previewFrameRequested = true;
+    window.requestAnimationFrame(() => {{
+        previewFrameRequested = false;
+        updateGeneratedQrLivePreview(pendingPreviewHex);
+    }});
+}}
+
+function updateGeneratedQrLivePreview(hex) {{
+    if (!generatedQrImage || !originalGeneratedQrSrc) return;
+
+    const newRgb = hexToRgb(hex);
+    if (!newRgb) return;
+
+    const sourceImg = new Image();
+
+    sourceImg.onload = () => {{
+        const imgW = sourceImg.naturalWidth || sourceImg.width;
+        const imgH = sourceImg.naturalHeight || sourceImg.height;
+
+        if (!imgW || !imgH) return;
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", {{ willReadFrequently: true }});
+        if (!ctx) return;
+
+        canvas.width = imgW;
+        canvas.height = imgH;
+        ctx.drawImage(sourceImg, 0, 0, imgW, imgH);
+
+        let imageData;
+        try {{
+            imageData = ctx.getImageData(0, 0, imgW, imgH);
+        }} catch (err) {{
+            return;
+        }}
+
+        const data = imageData.data;
+        const targetIndex = 0;
+        const targetR = data[targetIndex];
+        const targetG = data[targetIndex + 1];
+        const targetB = data[targetIndex + 2];
+        const tolerance = 42;
+        const visited = new Uint8Array(imgW * imgH);
+        const stack = [];
+
+        function maybePush(x, y) {{
+            if (x < 0 || y < 0 || x >= imgW || y >= imgH) return;
+            const pos = y * imgW + x;
+            if (visited[pos]) return;
+
+            const i = pos * 4;
+            const a = data[i + 3];
+            if (a === 0) return;
+
+            if (colorDistanceRgb(data[i], data[i + 1], data[i + 2], targetR, targetG, targetB) <= tolerance) {{
+                visited[pos] = 1;
+                stack.push(pos);
+            }}
+        }}
+
+        for (let x = 0; x < imgW; x++) {{
+            maybePush(x, 0);
+            maybePush(x, imgH - 1);
+        }}
+
+        for (let y = 0; y < imgH; y++) {{
+            maybePush(0, y);
+            maybePush(imgW - 1, y);
+        }}
+
+        while (stack.length) {{
+            const pos = stack.pop();
+            const i = pos * 4;
+
+            data[i] = newRgb.r;
+            data[i + 1] = newRgb.g;
+            data[i + 2] = newRgb.b;
+            data[i + 3] = 255;
+
+            const x = pos % imgW;
+            const y = Math.floor(pos / imgW);
+
+            maybePush(x + 1, y);
+            maybePush(x - 1, y);
+            maybePush(x, y + 1);
+            maybePush(x, y - 1);
+        }}
+
+        ctx.putImageData(imageData, 0, 0);
+        generatedQrImage.src = canvas.toDataURL("image/png");
+    }};
+
+    sourceImg.src = originalGeneratedQrSrc;
+}}
 
 function sampleColorFromGeneratedImage(e) {{
     if (!generatedQrImage) return;
