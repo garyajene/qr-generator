@@ -1411,24 +1411,70 @@ docSwatches.forEach(btn => {{
     }});
 }});
 
-if (eyedropperBtn) {{
-    if (!("EyeDropper" in window)) {{
-        eyedropperBtn.disabled = true;
-        eyedropperBtn.title = "Pick From Image is not supported in this browser.";
-    }} else {{
-        eyedropperBtn.addEventListener("click", async () => {{
-            try {{
-                const eyeDropper = new EyeDropper();
-                const result = await eyeDropper.open();
-                if (result && result.sRGBHex) {{
-                    setFromHex(result.sRGBHex.toLowerCase());
-                }}
-            }} catch (err) {{
-                // user cancelled
-            }}
-        }});
+let imagePickMode = false;
+
+function stopImagePickMode() {{
+    imagePickMode = false;
+    const generatedQr = document.querySelector(".generated-qr");
+    if (generatedQr) {{
+        generatedQr.style.cursor = "";
+        generatedQr.style.outline = "";
+    }}
+    if (eyedropperBtn) {{
+        eyedropperBtn.textContent = "Pick From Image";
     }}
 }}
+
+if (eyedropperBtn) {{
+    eyedropperBtn.addEventListener("click", () => {{
+        const generatedQr = document.querySelector(".generated-qr");
+        if (!generatedQr) return;
+
+        imagePickMode = true;
+        generatedQr.style.cursor = "crosshair";
+        generatedQr.style.outline = "3px solid #006dff";
+        eyedropperBtn.textContent = "Click QR";
+    }});
+}}
+
+const generatedQrForPicking = document.querySelector(".generated-qr");
+
+if (generatedQrForPicking) {{
+    generatedQrForPicking.addEventListener("click", (e) => {{
+        if (!imagePickMode) return;
+
+        try {{
+            const rect = generatedQrForPicking.getBoundingClientRect();
+            const naturalW = generatedQrForPicking.naturalWidth || generatedQrForPicking.width;
+            const naturalH = generatedQrForPicking.naturalHeight || generatedQrForPicking.height;
+
+            const x = Math.floor(((e.clientX - rect.left) / rect.width) * naturalW);
+            const y = Math.floor(((e.clientY - rect.top) / rect.height) * naturalH);
+
+            const canvas = document.createElement("canvas");
+            canvas.width = naturalW;
+            canvas.height = naturalH;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(generatedQrForPicking, 0, 0, naturalW, naturalH);
+
+            const pixel = ctx.getImageData(x, y, 1, 1).data;
+            const pickedHex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+
+            setFromHex(pickedHex);
+        }} catch (err) {{
+            // If sampling fails, leave the current color unchanged.
+        }}
+
+        stopImagePickMode();
+    }});
+}}
+
+window.addEventListener("keydown", (e) => {{
+    if (e.key === "Escape") {{
+        stopImagePickMode();
+    }}
+}});
 
 wirePointerDrag(svWrap, handleSVPointer);
 wirePointerDrag(hueWrap, (x) => handleHuePointer(x));
