@@ -613,7 +613,7 @@ button {{
 }}
 
 .mockups-result {{
-    margin-top: 30px;
+    margin-top: 0;
 }}
 
 .generated-qr {{
@@ -648,6 +648,12 @@ button {{
 .subhead {{
     font-weight: bold;
     margin-bottom: 8px;
+}}
+
+.dome-mockup-wrap .subhead {{
+    font-size: 24px;
+    line-height: 1.15;
+    margin-bottom: 14px;
 }}
 
 .bg-tools {{
@@ -1000,7 +1006,7 @@ button {{
                         <div class="subhead">Business Card</div>
                         <img class="mockup-card" src="data:image/png;base64,{card_mockup_b64}">
                     </div>
-                    <div>
+                    <div class="dome-mockup-wrap">
                         <div class="subhead">Dome Sticker</div>
                         <img class="mockup-dome" src="data:image/png;base64,{dome_mockup_b64}">
                     </div>
@@ -1460,7 +1466,12 @@ docSwatches.forEach(btn => {{
 }});
 
 const generatedQrImage = document.querySelector(".generated-qr");
+const mockupCardImage = document.querySelector(".mockup-card");
+const mockupDomeImage = document.querySelector(".mockup-dome");
 let originalGeneratedQrSrc = generatedQrImage ? generatedQrImage.src : "";
+let originalMockupCardSrc = mockupCardImage ? mockupCardImage.src : "";
+let originalMockupDomeSrc = mockupDomeImage ? mockupDomeImage.src : "";
+let originalPreviewBaseHex = currentBgLabel ? normalizeHex(currentBgLabel.textContent.trim()) : "";
 let pendingPreviewHex = null;
 let previewFrameRequested = false;
 
@@ -1490,6 +1501,12 @@ function scheduleGeneratedQrLivePreview(hex) {{
 }}
 
 function updateGeneratedQrLivePreview(hex) {{
+    updateGeneratedQrEdgePreview(hex);
+    updateMockupColorPreview(mockupCardImage, originalMockupCardSrc, hex);
+    updateMockupColorPreview(mockupDomeImage, originalMockupDomeSrc, hex);
+}}
+
+function updateGeneratedQrEdgePreview(hex) {{
     if (!generatedQrImage || !originalGeneratedQrSrc) return;
 
     const newRgb = hexToRgb(hex);
@@ -1575,6 +1592,57 @@ function updateGeneratedQrLivePreview(hex) {{
     }};
 
     sourceImg.src = originalGeneratedQrSrc;
+}}
+
+function updateMockupColorPreview(imageEl, originalSrc, hex) {{
+    if (!imageEl || !originalSrc || !originalPreviewBaseHex) return;
+
+    const newRgb = hexToRgb(hex);
+    const baseRgb = hexToRgb(originalPreviewBaseHex);
+    if (!newRgb || !baseRgb) return;
+
+    const sourceImg = new Image();
+
+    sourceImg.onload = () => {{
+        const imgW = sourceImg.naturalWidth || sourceImg.width;
+        const imgH = sourceImg.naturalHeight || sourceImg.height;
+
+        if (!imgW || !imgH) return;
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", {{ willReadFrequently: true }});
+        if (!ctx) return;
+
+        canvas.width = imgW;
+        canvas.height = imgH;
+        ctx.drawImage(sourceImg, 0, 0, imgW, imgH);
+
+        let imageData;
+        try {{
+            imageData = ctx.getImageData(0, 0, imgW, imgH);
+        }} catch (err) {{
+            return;
+        }}
+
+        const data = imageData.data;
+        const tolerance = 58;
+
+        for (let i = 0; i < data.length; i += 4) {{
+            const a = data[i + 3];
+            if (a === 0) continue;
+
+            if (colorDistanceRgb(data[i], data[i + 1], data[i + 2], baseRgb.r, baseRgb.g, baseRgb.b) <= tolerance) {{
+                data[i] = newRgb.r;
+                data[i + 1] = newRgb.g;
+                data[i + 2] = newRgb.b;
+            }}
+        }}
+
+        ctx.putImageData(imageData, 0, 0);
+        imageEl.src = canvas.toDataURL("image/png");
+    }};
+
+    sourceImg.src = originalSrc;
 }}
 
 function sampleColorFromGeneratedImage(e) {{
