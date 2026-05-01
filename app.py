@@ -1754,5 +1754,185 @@ def home():
     )
 
 
+@app.route("/buttn/test")
+def buttn_test():
+    return """
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BUTTN Profile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #eef1f4;
+    color: #111;
+}
+
+.page-wrap {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 24px 14px;
+}
+
+.phone-card {
+    width: 100%;
+    max-width: 430px;
+    background: #ffffff;
+    border-radius: 30px;
+    overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.14);
+}
+
+.hero {
+    min-height: 245px;
+    padding: 34px 24px 28px;
+    text-align: center;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(167,225,228,0.75), transparent 36%),
+        radial-gradient(circle at 80% 10%, rgba(255,214,165,0.80), transparent 34%),
+        linear-gradient(135deg, #f9fbfc, #eaf6f7);
+}
+
+.avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    margin: 0 auto 14px;
+    background: #ffffff;
+    border: 5px solid rgba(255,255,255,0.92);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.name {
+    font-size: 25px;
+    font-weight: 800;
+    margin-bottom: 6px;
+}
+
+.role {
+    font-size: 15px;
+    color: #4d5963;
+    line-height: 1.4;
+}
+
+.contact-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 18px 20px 8px;
+}
+
+.contact-btn {
+    border: 1px solid #e2e5e8;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 12px 8px;
+    text-align: center;
+    text-decoration: none;
+    color: #111;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 5px 14px rgba(0,0,0,0.05);
+}
+
+.content {
+    padding: 10px 20px 26px;
+}
+
+.about {
+    background: #f6f8f9;
+    border: 1px solid #eaedf0;
+    border-radius: 20px;
+    padding: 16px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: #333;
+    margin: 10px 0 16px;
+}
+
+.link-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid #e4e7eb;
+    text-decoration: none;
+    color: #111;
+    font-weight: 750;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+.arrow {
+    color: #7c8790;
+    font-size: 20px;
+}
+
+.footer-note {
+    text-align: center;
+    font-size: 12px;
+    color: #8a949c;
+    margin-top: 20px;
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+    <main class="phone-card">
+        <section class="hero">
+            <div class="avatar">B</div>
+            <div class="name">Gary Ajené</div>
+            <div class="role">T-Shirt Help Desk · Creator · Educator</div>
+        </section>
+
+        <section class="contact-row">
+            <a class="contact-btn" href="tel:#">Call</a>
+            <a class="contact-btn" href="mailto:#">Email</a>
+            <a class="contact-btn" href="#">Save</a>
+        </section>
+
+        <section class="content">
+            <div class="about">
+                Helping creators, clothing brands, and beginners start smarter with tools, training, and real-world guidance.
+            </div>
+
+            <div class="link-list">
+                <a class="profile-link" href="#"><span>Visit My Store</span><span class="arrow">›</span></a>
+                <a class="profile-link" href="#"><span>Watch My YouTube</span><span class="arrow">›</span></a>
+                <a class="profile-link" href="#"><span>Free T-Shirt Guide</span><span class="arrow">›</span></a>
+                <a class="profile-link" href="#"><span>Book / Contact Me</span><span class="arrow">›</span></a>
+            </div>
+
+            <div class="footer-note">Powered by BUTTN</div>
+        </section>
+    </main>
+</div>
+</body>
+</html>
+"""
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
