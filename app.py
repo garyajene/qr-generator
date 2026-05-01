@@ -1412,69 +1412,67 @@ docSwatches.forEach(btn => {{
 }});
 
 let imagePickMode = false;
+const generatedQrImage = document.querySelector(".generated-qr");
 
-function stopImagePickMode() {{
-    imagePickMode = false;
-    const generatedQr = document.querySelector(".generated-qr");
-    if (generatedQr) {{
-        generatedQr.style.cursor = "";
-        generatedQr.style.outline = "";
+function setImagePickMode(active) {{
+    imagePickMode = active;
+
+    if (generatedQrImage) {{
+        generatedQrImage.style.cursor = active ? "crosshair" : "default";
     }}
+
     if (eyedropperBtn) {{
-        eyedropperBtn.textContent = "Pick From Image";
+        eyedropperBtn.textContent = active ? "Click QR Image" : "Pick From Image";
+        eyedropperBtn.title = active
+            ? "Now click directly on the generated QR image to sample a color."
+            : "Click, then choose a color from the generated QR image.";
     }}
+}}
+
+function sampleColorFromGeneratedImage(e) {{
+    if (!imagePickMode || !generatedQrImage) return;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", {{ willReadFrequently: true }});
+
+    const imgW = generatedQrImage.naturalWidth || generatedQrImage.width;
+    const imgH = generatedQrImage.naturalHeight || generatedQrImage.height;
+
+    if (!imgW || !imgH || !ctx) {{
+        setImagePickMode(false);
+        return;
+    }}
+
+    canvas.width = imgW;
+    canvas.height = imgH;
+    ctx.drawImage(generatedQrImage, 0, 0, imgW, imgH);
+
+    const rect = generatedQrImage.getBoundingClientRect();
+    const x = Math.floor(clamp(e.clientX - rect.left, 0, rect.width - 1) * (imgW / rect.width));
+    const y = Math.floor(clamp(e.clientY - rect.top, 0, rect.height - 1) * (imgH / rect.height));
+
+    try {{
+        const pixel = ctx.getImageData(x, y, 1, 1).data;
+        const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+        setFromHex(hex);
+    }} catch (err) {{
+        // If the image cannot be read for any reason, safely cancel pick mode.
+    }}
+
+    setImagePickMode(false);
 }}
 
 if (eyedropperBtn) {{
+    eyedropperBtn.disabled = false;
     eyedropperBtn.addEventListener("click", () => {{
-        const generatedQr = document.querySelector(".generated-qr");
-        if (!generatedQr) return;
-
-        imagePickMode = true;
-        generatedQr.style.cursor = "crosshair";
-        generatedQr.style.outline = "3px solid #006dff";
-        eyedropperBtn.textContent = "Click QR";
+        if (!generatedQrImage) return;
+        setImagePickMode(!imagePickMode);
     }});
 }}
 
-const generatedQrForPicking = document.querySelector(".generated-qr");
-
-if (generatedQrForPicking) {{
-    generatedQrForPicking.addEventListener("click", (e) => {{
-        if (!imagePickMode) return;
-
-        try {{
-            const rect = generatedQrForPicking.getBoundingClientRect();
-            const naturalW = generatedQrForPicking.naturalWidth || generatedQrForPicking.width;
-            const naturalH = generatedQrForPicking.naturalHeight || generatedQrForPicking.height;
-
-            const x = Math.floor(((e.clientX - rect.left) / rect.width) * naturalW);
-            const y = Math.floor(((e.clientY - rect.top) / rect.height) * naturalH);
-
-            const canvas = document.createElement("canvas");
-            canvas.width = naturalW;
-            canvas.height = naturalH;
-
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(generatedQrForPicking, 0, 0, naturalW, naturalH);
-
-            const pixel = ctx.getImageData(x, y, 1, 1).data;
-            const pickedHex = rgbToHex(pixel[0], pixel[1], pixel[2]);
-
-            setFromHex(pickedHex);
-        }} catch (err) {{
-            // If sampling fails, leave the current color unchanged.
-        }}
-
-        stopImagePickMode();
-    }});
+if (generatedQrImage) {{
+    generatedQrImage.addEventListener("click", sampleColorFromGeneratedImage);
 }}
-
-window.addEventListener("keydown", (e) => {{
-    if (e.key === "Escape") {{
-        stopImagePickMode();
-    }}
-}});
 
 wirePointerDrag(svWrap, handleSVPointer);
 wirePointerDrag(hueWrap, (x) => handleHuePointer(x));
