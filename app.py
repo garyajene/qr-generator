@@ -987,8 +987,6 @@ button {{
                         </div>
 
                         <div class="alpha-row">
-                            <button type="button" class="dropper-btn-square" id="eyedropper_btn">Pick From Image</button>
-
                             <div class="alpha-label-block">
                                 <div class="alpha-label-top">
                                     <div class="alpha-title">Opacity/Alpha</div>
@@ -999,6 +997,8 @@ button {{
                                 </div>
                             </div>
                         </div>
+
+                        <div class="small-note">Tip: click directly on the generated QR image to sample a color.</div>
 
                         <div class="values-row">
                             <div class="value-box">
@@ -1135,7 +1135,6 @@ const bgOverrideInput = document.getElementById("bg_override");
 const rVal = document.getElementById("r_val");
 const gVal = document.getElementById("g_val");
 const bVal = document.getElementById("b_val");
-const eyedropperBtn = document.getElementById("eyedropper_btn");
 const docSwatches = document.querySelectorAll(".doc-swatch");
 
 const svCanvas = document.getElementById("sv_canvas");
@@ -1411,26 +1410,10 @@ docSwatches.forEach(btn => {{
     }});
 }});
 
-let imagePickMode = false;
 const generatedQrImage = document.querySelector(".generated-qr");
 
-function setImagePickMode(active) {{
-    imagePickMode = active;
-
-    if (generatedQrImage) {{
-        generatedQrImage.style.cursor = active ? "crosshair" : "default";
-    }}
-
-    if (eyedropperBtn) {{
-        eyedropperBtn.textContent = active ? "Click QR Image" : "Pick From Image";
-        eyedropperBtn.title = active
-            ? "Now click directly on the generated QR image to sample a color."
-            : "Click, then choose a color from the generated QR image.";
-    }}
-}}
-
 function sampleColorFromGeneratedImage(e) {{
-    if (!imagePickMode || !generatedQrImage) return;
+    if (!generatedQrImage) return;
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", {{ willReadFrequently: true }});
@@ -1438,10 +1421,7 @@ function sampleColorFromGeneratedImage(e) {{
     const imgW = generatedQrImage.naturalWidth || generatedQrImage.width;
     const imgH = generatedQrImage.naturalHeight || generatedQrImage.height;
 
-    if (!imgW || !imgH || !ctx) {{
-        setImagePickMode(false);
-        return;
-    }}
+    if (!imgW || !imgH || !ctx) return;
 
     canvas.width = imgW;
     canvas.height = imgH;
@@ -1456,21 +1436,13 @@ function sampleColorFromGeneratedImage(e) {{
         const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
         setFromHex(hex);
     }} catch (err) {{
-        // If the image cannot be read for any reason, safely cancel pick mode.
+        // Safely ignore if the image cannot be sampled.
     }}
-
-    setImagePickMode(false);
-}}
-
-if (eyedropperBtn) {{
-    eyedropperBtn.disabled = false;
-    eyedropperBtn.addEventListener("click", () => {{
-        if (!generatedQrImage) return;
-        setImagePickMode(!imagePickMode);
-    }});
 }}
 
 if (generatedQrImage) {{
+    generatedQrImage.style.cursor = "crosshair";
+    generatedQrImage.title = "Click the QR image to sample a color.";
     generatedQrImage.addEventListener("click", sampleColorFromGeneratedImage);
 }}
 
