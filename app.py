@@ -2090,9 +2090,12 @@ let liveHeaderImageData = existingHeaderImageData;
 function getEl(id) {{ return document.getElementById(id); }}
 function getVal(id, fallback) {{ const el = getEl(id); return el ? (el.value || fallback || "") : (fallback || ""); }}
 function escapeHtml(value) {{
-    return String(value || "").replace(/[&<>"']/g, function(ch) {{
-        return {{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}}[ch];
-    }});
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }}
 function safeUrl(value) {{
     let v = String(value || "").trim();
