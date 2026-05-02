@@ -2226,19 +2226,86 @@ renderLivePreview();
 @app.route("/buttn/edit/test", methods=["GET", "POST"])
 def buttn_edit_test_alias():
     return buttn_edit_profile("test")
-@app.route("/test-granite")
-def test_granite():
+@app.route("/chatbot", methods=["GET", "POST"])
+def chatbot():
     import replicate
+    import html
 
-    output = replicate.run(
-        "ibm-granite/granite-3.3-8b-instruct",
-        input={
-            "prompt": "Say hello in one short sentence.",
-            "max_completion_tokens": 50
-        }
-    )
+    user_message = ""
+    bot_response = ""
 
-    return str(output)
+    if request.method == "POST":
+        user_message = (request.form.get("message") or "").strip()
+
+        if user_message:
+            output = replicate.run(
+                "ibm-granite/granite-3.3-8b-instruct",
+                input={
+                    "prompt": user_message,
+                    "max_completion_tokens": 500,
+                    "temperature": 0.6
+                }
+            )
+
+            bot_response = str(output)
+
+    return f"""
+    <!doctype html>
+    <html>
+    <head>
+        <title>Granite Chatbot</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background: #f5f5f5;
+                padding: 40px;
+            }}
+            .chatbox {{
+                max-width: 700px;
+                margin: 0 auto;
+                background: white;
+                padding: 25px;
+                border-radius: 14px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            }}
+            textarea {{
+                width: 100%;
+                height: 120px;
+                padding: 12px;
+                font-size: 16px;
+            }}
+            button {{
+                margin-top: 12px;
+                padding: 12px 20px;
+                font-size: 16px;
+                cursor: pointer;
+            }}
+            .response {{
+                margin-top: 25px;
+                padding: 18px;
+                background: #f0f0f0;
+                border-radius: 10px;
+                white-space: pre-wrap;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="chatbox">
+            <h1>Granite Chatbot</h1>
+
+            <form method="post">
+                <textarea name="message" placeholder="Ask something...">{html.escape(user_message)}</textarea>
+                <br>
+                <button type="submit">Send</button>
+            </form>
+
+            <div class="response">
+                {html.escape(bot_response)}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
