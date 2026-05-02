@@ -955,6 +955,13 @@ button {{
         ''' if qr_img_b64 else ''}
 
         {f'''
+        <div style="margin-top:20px; padding:18px; border:1px solid #ddd; background:#fafafa; max-width:640px; border-radius:10px;">
+            <button type="submit" formaction="/buttn/start/test" formmethod="post">Continue to BUTTN Setup</button>
+            <div class="small-note">Demo flow: this carries the uploaded logo into the BUTTN profile setup.</div>
+        </div>
+        ''' if qr_img_b64 else ''}
+
+        {f'''
         <div class="bg-tools">
             <div class="bg-tools-head">
                 <button type="button" id="toggle-bg-tools">Change Background Color</button>
@@ -1510,29 +1517,75 @@ def home():
 # -----------------------------
 # Temporary in-memory storage for the first working editor test.
 # This proves: edit -> save -> public profile.
+
 BUTTN_STORE = {
     "test": {
+        "slug": "test",
         "name": "Gary Ajené",
         "title": "T-Shirt Help Desk",
         "phone": "",
         "email": "",
-        "background": "soft-blue",
-        "logo_color": "#111111",
-        "links": [
-            {"label": "Visit My Store", "url": "#"},
-            {"label": "Watch My YouTube", "url": "#"},
-            {"label": "Free T-Shirt Guide", "url": "#"},
-        ],
+        "logo_color": "#86cce2",
+        "logo_image": "",
+        "hero_bg_color": "#dff4ff",
+        "hero_bg_image": "",
+        "hero_bg_opacity": "35",
+        "page_bg_color": "#ffffff",
+        "link_bg_color": "#f2f4f7",
+        "link_text_color": "#111111",
+        "link_border_color": "#e5e7eb",
+        "links": [],
     }
 }
 
-BACKGROUND_STYLES = {
-    "soft-blue": "linear-gradient(135deg, #eaf4ff 0%, #ffffff 48%, #f2f7ff 100%)",
-    "warm-light": "linear-gradient(135deg, #fff4e8 0%, #ffffff 50%, #fffaf2 100%)",
-    "clean-gray": "linear-gradient(135deg, #f2f4f7 0%, #ffffff 50%, #eef1f5 100%)",
-    "mint": "linear-gradient(135deg, #eafff7 0%, #ffffff 50%, #f1fff8 100%)",
-    "lavender": "linear-gradient(135deg, #f3edff 0%, #ffffff 50%, #faf7ff 100%)",
+BACKGROUND_PRESETS = {
+    "soft-blue": "#dff4ff",
+    "warm-light": "#fff0df",
+    "clean-gray": "#f2f4f7",
+    "mint": "#ddfff2",
+    "lavender": "#efe6ff",
+    "rose": "#ffe3ef",
+    "gold": "#fff2c6",
+    "white": "#ffffff",
 }
+
+
+def normalize_url(value):
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://", "mailto:", "tel:")):
+        return value
+    return "https://" + value
+
+
+def safe_slug(value):
+    value = (value or "test").strip().lower()
+    cleaned = []
+    for ch in value:
+        if ch.isalnum():
+            cleaned.append(ch)
+        elif ch in ["-", "_", " "]:
+            cleaned.append("-")
+    slug = "".join(cleaned).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "test"
+
+
+def read_upload_as_b64(file_storage):
+    if not file_storage or file_storage.filename == "":
+        return ""
+    try:
+        data = file_storage.read()
+        if not data:
+            return ""
+        img = Image.open(BytesIO(data))
+        img.load()
+        img = img.convert("RGBA")
+        return image_to_base64(img)
+    except Exception:
+        return ""
 
 
 def get_buttn_profile(username):
@@ -1545,9 +1598,31 @@ def render_buttn_profile(username):
     safe_title = html.escape(profile.get("title", ""))
     safe_phone = html.escape(profile.get("phone", ""))
     safe_email = html.escape(profile.get("email", ""))
-    safe_logo_color = html.escape(profile.get("logo_color", "#111111"))
-    bg_key = profile.get("background", "soft-blue")
-    bg_style = BACKGROUND_STYLES.get(bg_key, BACKGROUND_STYLES["soft-blue"])
+    safe_logo_color = html.escape(profile.get("logo_color", "#86cce2"))
+    hero_bg_color = html.escape(profile.get("hero_bg_color", "#dff4ff"))
+    page_bg_color = html.escape(profile.get("page_bg_color", "#ffffff"))
+    link_bg_color = html.escape(profile.get("link_bg_color", "#f2f4f7"))
+    link_text_color = html.escape(profile.get("link_text_color", "#111111"))
+    link_border_color = html.escape(profile.get("link_border_color", "#e5e7eb"))
+    opacity_raw = str(profile.get("hero_bg_opacity", "35"))
+    try:
+        hero_opacity = max(0, min(100, int(opacity_raw))) / 100
+    except Exception:
+        hero_opacity = 0.35
+
+    logo_b64 = profile.get("logo_image", "")
+    hero_img_b64 = profile.get("hero_bg_image", "")
+
+    if logo_b64:
+        logo_html = f'<div class="logo-circle"><img src="data:image/png;base64,{logo_b64}" alt="Profile Logo"></div>'
+    else:
+        initial = safe_name[:1].upper() if safe_name else "B"
+        logo_html = f'<div class="logo-circle">{initial}</div>'
+
+    if hero_img_b64:
+        hero_bg_html = f'<div class="hero-bg" style="background-image:url(data:image/png;base64,{hero_img_b64}); opacity:{hero_opacity};"></div>'
+    else:
+        hero_bg_html = f'<div class="hero-bg" style="background:{hero_bg_color}; opacity:1;"></div>'
 
     link_html = ""
     for link in profile.get("links", []):
@@ -1555,6 +1630,8 @@ def render_buttn_profile(username):
         url = html.escape(link.get("url", "#"))
         if label:
             link_html += f'<a class="buttn-link" href="{url}">{label}</a>'
+    if not link_html:
+        link_html = '<div class="empty-links">No links added yet.</div>'
 
     phone_button = f'<a class="action-btn" href="tel:{safe_phone}">Call</a>' if safe_phone else '<span class="action-btn muted">Call</span>'
     email_button = f'<a class="action-btn" href="mailto:{safe_email}">Email</a>' if safe_email else '<span class="action-btn muted">Email</span>'
@@ -1567,118 +1644,36 @@ def render_buttn_profile(username):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{safe_name} | BUTTN</title>
 <style>
-body {{
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f4f5f7;
-    color: #111;
-}}
-.phone-shell {{
-    max-width: 430px;
-    min-height: 100vh;
-    margin: 0 auto;
-    background: #ffffff;
-    box-shadow: 0 0 25px rgba(0,0,0,0.08);
-}}
-.hero {{
-    padding: 34px 22px 28px;
-    text-align: center;
-    background: {bg_style};
-    border-bottom-left-radius: 28px;
-    border-bottom-right-radius: 28px;
-}}
-.logo-circle {{
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    background: {safe_logo_color};
-    color: white;
-    margin: 0 auto 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 34px;
-    font-weight: bold;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.14);
-}}
-.name {{
-    font-size: 24px;
-    font-weight: 800;
-    margin-top: 6px;
-}}
-.title {{
-    font-size: 15px;
-    color: #555;
-    margin-top: 6px;
-}}
-.actions {{
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 18px;
-    flex-wrap: wrap;
-}}
-.action-btn {{
-    display: inline-block;
-    text-decoration: none;
-    color: #111;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 999px;
-    padding: 10px 16px;
-    font-size: 14px;
-    font-weight: 700;
-}}
-.action-btn.muted {{
-    color: #999;
-}}
-.content {{
-    padding: 22px;
-}}
-.section-title {{
-    font-weight: 800;
-    font-size: 14px;
-    color: #555;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-}}
-.buttn-link {{
-    display: block;
-    background: #f2f4f7;
-    color: #111;
-    text-decoration: none;
-    padding: 15px 16px;
-    border-radius: 16px;
-    margin-bottom: 12px;
-    font-weight: 700;
-    border: 1px solid #e5e7eb;
-}}
-.footer {{
-    text-align: center;
-    color: #888;
-    font-size: 12px;
-    padding: 20px;
-}}
-.edit-link {{
-    display: block;
-    text-align: center;
-    margin-top: 18px;
-    color: #555;
-    font-size: 13px;
-}}
+body {{ margin:0; font-family:Arial,sans-serif; background:#f4f5f7; color:#111; }}
+.phone-shell {{ max-width:430px; min-height:100vh; margin:0 auto; background:{page_bg_color}; box-shadow:0 0 25px rgba(0,0,0,.08); }}
+.hero {{ position:relative; overflow:hidden; min-height:390px; padding:58px 22px 34px; text-align:center; border-bottom-left-radius:32px; border-bottom-right-radius:32px; }}
+.hero-bg {{ position:absolute; inset:0; background-size:cover; background-position:center; z-index:0; }}
+.hero::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.78)); z-index:1; }}
+.hero-inner {{ position:relative; z-index:2; }}
+.logo-circle {{ width:128px; height:128px; border-radius:50%; background:{safe_logo_color}; color:white; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; font-size:42px; font-weight:bold; box-shadow:0 10px 24px rgba(0,0,0,.14); overflow:hidden; }}
+.logo-circle img {{ width:100%; height:100%; object-fit:cover; }}
+.name {{ font-size:28px; font-weight:900; margin-top:8px; }}
+.title {{ font-size:17px; color:#555; margin-top:7px; }}
+.actions {{ display:flex; justify-content:center; gap:10px; margin-top:22px; flex-wrap:wrap; }}
+.action-btn {{ display:inline-block; text-decoration:none; color:#111; background:white; border:1px solid #ddd; border-radius:999px; padding:12px 18px; font-size:15px; font-weight:800; }}
+.action-btn.muted {{ color:#999; }}
+.content {{ padding:24px 22px; }}
+.section-title {{ font-weight:900; font-size:15px; color:#555; margin-bottom:12px; text-transform:uppercase; letter-spacing:.06em; }}
+.buttn-link {{ display:block; background:{link_bg_color}; color:{link_text_color}; text-decoration:none; padding:16px 18px; border-radius:16px; margin-bottom:13px; font-weight:800; border:1px solid {link_border_color}; }}
+.empty-links {{ color:#888; padding:16px 0; }}
+.footer {{ text-align:center; color:#888; font-size:12px; padding:70px 20px 28px; }}
+.edit-link {{ display:block; text-align:center; margin-top:22px; color:#555; font-size:13px; }}
 </style>
 </head>
 <body>
 <div class="phone-shell">
     <div class="hero">
-        <div class="logo-circle">{safe_name[:1].upper() if safe_name else 'B'}</div>
-        <div class="name">{safe_name}</div>
-        <div class="title">{safe_title}</div>
-        <div class="actions">
-            {phone_button}
-            {email_button}
-            <span class="action-btn">Save Contact</span>
+        {hero_bg_html}
+        <div class="hero-inner">
+            {logo_html}
+            <div class="name">{safe_name}</div>
+            <div class="title">{safe_title}</div>
+            <div class="actions">{phone_button}{email_button}<span class="action-btn">Save Contact</span></div>
         </div>
     </div>
     <div class="content">
@@ -1703,187 +1698,91 @@ def buttn_public_profile(username):
     return render_buttn_profile(username)
 
 
+@app.route("/buttn/start/test", methods=["POST"])
+def buttn_start_test():
+    profile = get_buttn_profile("test").copy()
+    art_data = (request.form.get("art_data") or "").strip()
+    bg_override = (request.form.get("bg_override") or "").strip()
+    if art_data:
+        profile["logo_image"] = art_data
+    if parse_hex_color(bg_override):
+        profile["logo_color"] = bg_override
+        profile["hero_bg_color"] = bg_override
+    BUTTN_STORE["test"] = profile
+    return redirect("/buttn/checkout/test")
+
+
+@app.route("/buttn/checkout/test")
+def buttn_checkout_test():
+    return """
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>BUTTN Demo Checkout</title><style>body{font-family:Arial,sans-serif;background:#f4f5f7;margin:0;padding:28px}.box{max-width:520px;margin:60px auto;background:white;padding:28px;border-radius:22px;box-shadow:0 8px 24px rgba(0,0,0,.08);text-align:center}a{display:inline-block;margin-top:18px;padding:14px 18px;background:#111;color:white;border-radius:14px;text-decoration:none;font-weight:800}</style></head><body><div class="box"><h1>Demo Payment Step</h1><p>This is where payment/order confirmation will go later. For now, continue to build the BUTTN profile.</p><a href="/buttn/edit/test">Continue to Profile Setup</a></div></body></html>
+"""
+
+
 @app.route("/buttn/edit/test", methods=["GET", "POST"])
 def buttn_edit_test():
     username = "test"
-
     if request.method == "POST":
         links = []
-        for i in range(1, 6):
+        for i in range(1, 7):
             label = (request.form.get(f"link{i}_label") or "").strip()
-            url = (request.form.get(f"link{i}_url") or "").strip()
+            url = normalize_url(request.form.get(f"link{i}_url") or "")
             if label:
-                if url and not (url.startswith("http://") or url.startswith("https://") or url.startswith("mailto:") or url.startswith("tel:")):
-                    url = "https://" + url
                 links.append({"label": label, "url": url or "#"})
-
+        existing = get_buttn_profile(username).copy()
+        logo_upload = read_upload_as_b64(request.files.get("logo_upload"))
+        hero_upload = read_upload_as_b64(request.files.get("hero_bg_upload"))
+        preset = (request.form.get("background_preset") or "").strip()
+        logo_image = logo_upload or existing.get("logo_image", "")
+        hero_bg_image = hero_upload or existing.get("hero_bg_image", "")
+        hero_bg_color = (request.form.get("hero_bg_color") or "#dff4ff").strip()
+        if preset in BACKGROUND_PRESETS:
+            hero_bg_color = BACKGROUND_PRESETS[preset]
         BUTTN_STORE[username] = {
+            "slug": safe_slug(request.form.get("slug") or "test"),
             "name": (request.form.get("name") or "").strip() or "BUTTN User",
             "title": (request.form.get("title") or "").strip(),
             "phone": (request.form.get("phone") or "").strip(),
             "email": (request.form.get("email") or "").strip(),
-            "background": (request.form.get("background") or "soft-blue").strip(),
-            "logo_color": (request.form.get("logo_color") or "#111111").strip(),
+            "logo_color": (request.form.get("logo_color") or "#86cce2").strip(),
+            "logo_image": logo_image,
+            "hero_bg_color": hero_bg_color,
+            "hero_bg_image": hero_bg_image,
+            "hero_bg_opacity": (request.form.get("hero_bg_opacity") or "35").strip(),
+            "page_bg_color": (request.form.get("page_bg_color") or "#ffffff").strip(),
+            "link_bg_color": (request.form.get("link_bg_color") or "#f2f4f7").strip(),
+            "link_text_color": (request.form.get("link_text_color") or "#111111").strip(),
+            "link_border_color": (request.form.get("link_border_color") or "#e5e7eb").strip(),
             "links": links,
         }
         return redirect("/buttn/test")
 
     profile = get_buttn_profile(username)
-    safe_name = html.escape(profile.get("name", ""))
-    safe_title = html.escape(profile.get("title", ""))
-    safe_phone = html.escape(profile.get("phone", ""))
-    safe_email = html.escape(profile.get("email", ""))
-    safe_logo_color = html.escape(profile.get("logo_color", "#111111"))
-    current_bg = profile.get("background", "soft-blue")
     links = profile.get("links", [])
-
     def link_value(index, key):
         if index < len(links):
             return html.escape(links[index].get(key, ""))
         return ""
-
-    bg_options = ""
-    labels = {
-        "soft-blue": "Soft Blue",
-        "warm-light": "Warm Light",
-        "clean-gray": "Clean Gray",
-        "mint": "Mint",
-        "lavender": "Lavender",
-    }
-    for key, label in labels.items():
-        selected = "selected" if key == current_bg else ""
-        bg_options += f'<option value="{key}" {selected}>{label}</option>'
-
+    safe = lambda x: html.escape(str(x or ""))
+    preset_buttons = "".join([f'<label class="preset"><input type="radio" name="background_preset" value="{k}"><span style="background:{v};"></span>{k.replace("-", " ").title()}</label>' for k,v in BACKGROUND_PRESETS.items()])
     return f"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edit BUTTN Profile</title>
-<style>
-body {{
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f4f5f7;
-    color: #111;
-}}
-.editor-wrap {{
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 28px;
-}}
-.card {{
-    background: white;
-    border-radius: 22px;
-    padding: 24px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-}}
-h1 {{
-    margin-top: 0;
-}}
-label {{
-    display: block;
-    font-weight: 800;
-    margin-top: 16px;
-    margin-bottom: 6px;
-}}
-input, select {{
-    width: 100%;
-    box-sizing: border-box;
-    padding: 12px;
-    border-radius: 12px;
-    border: 1px solid #d8dbe0;
-    font-size: 16px;
-}}
-.link-row {{
-    display: grid;
-    grid-template-columns: 1fr 1.4fr;
-    gap: 10px;
-    margin-bottom: 10px;
-}}
-.save-btn {{
-    margin-top: 22px;
-    width: 100%;
-    padding: 14px;
-    border: none;
-    border-radius: 14px;
-    background: #111;
-    color: #fff;
-    font-size: 17px;
-    font-weight: 800;
-    cursor: pointer;
-}}
-.preview-link {{
-    display: inline-block;
-    margin-top: 18px;
-    color: #111;
-    font-weight: 700;
-}}
-.note {{
-    color: #666;
-    line-height: 1.4;
-}}
-@media (max-width: 640px) {{
-    .editor-wrap {{ padding: 16px; }}
-    .link-row {{ grid-template-columns: 1fr; }}
-}}
-</style>
-</head>
-<body>
-<div class="editor-wrap">
-    <div class="card">
-        <h1>Edit BUTTN Profile</h1>
-        <p class="note">This is the first test editor. Save your info, then it updates the public BUTTN page.</p>
-
-        <form method="post">
-            <label>Name</label>
-            <input name="name" value="{safe_name}" placeholder="Your name or brand name">
-
-            <label>Title / Company</label>
-            <input name="title" value="{safe_title}" placeholder="Company, title, or short tagline">
-
-            <label>Phone</label>
-            <input name="phone" value="{safe_phone}" placeholder="Phone number">
-
-            <label>Email</label>
-            <input name="email" value="{safe_email}" placeholder="Email address">
-
-            <label>Logo Color (temporary logo placeholder)</label>
-            <input name="logo_color" value="{safe_logo_color}" placeholder="#111111">
-
-            <label>Background Style</label>
-            <select name="background">{bg_options}</select>
-
-            <label>Links</label>
-            <div class="link-row">
-                <input name="link1_label" value="{link_value(0, 'label')}" placeholder="Link label">
-                <input name="link1_url" value="{link_value(0, 'url')}" placeholder="https://example.com">
-            </div>
-            <div class="link-row">
-                <input name="link2_label" value="{link_value(1, 'label')}" placeholder="Link label">
-                <input name="link2_url" value="{link_value(1, 'url')}" placeholder="https://example.com">
-            </div>
-            <div class="link-row">
-                <input name="link3_label" value="{link_value(2, 'label')}" placeholder="Link label">
-                <input name="link3_url" value="{link_value(2, 'url')}" placeholder="https://example.com">
-            </div>
-            <div class="link-row">
-                <input name="link4_label" value="{link_value(3, 'label')}" placeholder="Link label">
-                <input name="link4_url" value="{link_value(3, 'url')}" placeholder="https://example.com">
-            </div>
-            <div class="link-row">
-                <input name="link5_label" value="{link_value(4, 'label')}" placeholder="Link label">
-                <input name="link5_url" value="{link_value(4, 'url')}" placeholder="https://example.com">
-            </div>
-
-            <button class="save-btn" type="submit">Save BUTTN Profile</button>
-        </form>
-        <a class="preview-link" href="/buttn/test">View public profile</a>
-    </div>
-</div>
-</body>
-</html>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Edit BUTTN Profile</title>
+<style>body{{margin:0;font-family:Arial,sans-serif;background:#f4f5f7;color:#111}}.editor-wrap{{max-width:900px;margin:0 auto;padding:28px}}.card{{background:white;border-radius:22px;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,.08)}}h1{{margin-top:0}}h2{{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:22px}}label{{display:block;font-weight:800;margin-top:16px;margin-bottom:6px}}input,select{{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #d8dbe0;font-size:16px}}input[type=file]{{background:#fafafa}}input[type=color]{{height:48px;padding:5px}}.grid-2{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}.link-row{{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-bottom:10px}}.url-preview{{padding:13px;background:#f5f7fa;border-radius:12px;font-weight:800;color:#444}}.presets{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}.preset{{margin:0;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb;padding:10px;border-radius:12px}}.preset span{{width:24px;height:24px;border-radius:50%;border:1px solid #ddd}}.save-btn{{margin-top:22px;width:100%;padding:14px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer}}.preview-link{{display:inline-block;margin-top:18px;color:#111;font-weight:700}}.note{{color:#666;line-height:1.4}}@media(max-width:700px){{.editor-wrap{{padding:16px}}.grid-2,.link-row,.presets{{grid-template-columns:1fr}}}}</style></head><body>
+<div class="editor-wrap"><div class="card"><h1>Create Your BUTTN Profile</h1><p class="note">This is the setup page. Later, customers will land here after purchase.</p>
+<form method="post" enctype="multipart/form-data">
+<h2>BUTTN URL</h2><label>Your BUTTN URL</label><input name="slug" value="{safe(profile.get('slug','test'))}" placeholder="your-brand-name"><div class="url-preview">Preview: getbuttn.com/{safe(profile.get('slug','test'))}</div>
+<h2>Profile</h2><label>Name / Brand Name</label><input name="name" value="{safe(profile.get('name',''))}" placeholder="Your name or brand name"><label>Title / Company</label><input name="title" value="{safe(profile.get('title',''))}" placeholder="Company, title, or short tagline"><div class="grid-2"><div><label>Phone</label><input name="phone" value="{safe(profile.get('phone',''))}" placeholder="Phone number"></div><div><label>Email</label><input name="email" value="{safe(profile.get('email',''))}" placeholder="Email address"></div></div>
+<h2>Logo</h2><label>Upload Logo</label><input type="file" name="logo_upload" accept="image/*"><label>Logo Background Color</label><input type="color" name="logo_color" value="{safe(profile.get('logo_color','#86cce2'))}">
+<h2>Top Background</h2><label>Preset Backgrounds</label><div class="presets">{preset_buttons}</div><label>Custom Top Background Color</label><input type="color" name="hero_bg_color" value="{safe(profile.get('hero_bg_color','#dff4ff'))}"><label>Optional Top Background Image</label><input type="file" name="hero_bg_upload" accept="image/*"><label>Top Background Image Opacity</label><input type="range" name="hero_bg_opacity" min="0" max="100" value="{safe(profile.get('hero_bg_opacity','35'))}">
+<h2>Page + Link Colors</h2><div class="grid-2"><div><label>Bottom Page Background Color</label><input type="color" name="page_bg_color" value="{safe(profile.get('page_bg_color','#ffffff'))}"></div><div><label>Link Button Background Color</label><input type="color" name="link_bg_color" value="{safe(profile.get('link_bg_color','#f2f4f7'))}"></div><div><label>Link Text Color</label><input type="color" name="link_text_color" value="{safe(profile.get('link_text_color','#111111'))}"></div><div><label>Link Border Color</label><input type="color" name="link_border_color" value="{safe(profile.get('link_border_color','#e5e7eb'))}"></div></div>
+<h2>Links</h2>
+<div class="link-row"><input name="link1_label" value="{link_value(0,'label')}" placeholder="Link name"><input name="link1_url" value="{link_value(0,'url')}" placeholder="https://example.com"></div>
+<div class="link-row"><input name="link2_label" value="{link_value(1,'label')}" placeholder="Link name"><input name="link2_url" value="{link_value(1,'url')}" placeholder="https://example.com"></div>
+<div class="link-row"><input name="link3_label" value="{link_value(2,'label')}" placeholder="Link name"><input name="link3_url" value="{link_value(2,'url')}" placeholder="https://example.com"></div>
+<div class="link-row"><input name="link4_label" value="{link_value(3,'label')}" placeholder="Link name"><input name="link4_url" value="{link_value(3,'url')}" placeholder="https://example.com"></div>
+<div class="link-row"><input name="link5_label" value="{link_value(4,'label')}" placeholder="Link name"><input name="link5_url" value="{link_value(4,'url')}" placeholder="https://example.com"></div>
+<div class="link-row"><input name="link6_label" value="{link_value(5,'label')}" placeholder="Link name"><input name="link6_url" value="{link_value(5,'url')}" placeholder="https://example.com"></div>
+<button class="save-btn" type="submit">Save and Preview BUTTN Profile</button></form><a class="preview-link" href="/buttn/test">View public profile</a></div></div></body></html>
 """
 
 
