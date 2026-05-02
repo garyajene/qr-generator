@@ -2226,7 +2226,23 @@ renderLivePreview();
 @app.route("/buttn/edit/test", methods=["GET", "POST"])
 def buttn_edit_test_alias():
     return buttn_edit_profile("test")
+@app.route("/test-granite")
+def test_granite():
+    import replicate
+    import os
 
+    output = ""
+
+    for event in replicate.stream(
+        "ibm-granite/granite-3.3-8b-instruct",
+        input={
+            "prompt": "Say hello in one short sentence.",
+            "max_completion_tokens": 50
+        },
+    ):
+        output += str(event)
+
+    return output
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
