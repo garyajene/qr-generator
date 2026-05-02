@@ -624,6 +624,18 @@ button {{
     background: #fff;
 }}
 
+.continue-buttn-setup {{
+    display: inline-block;
+    margin-top: 16px;
+    padding: 12px 18px;
+    background: #000;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+}}
+
 .mockups {{
     display: flex;
     gap: 40px;
@@ -994,6 +1006,7 @@ button {{
                 <div class="result-block">
                     <h2>Generated QR</h2>
                     <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}" alt="Click the QR image to sample a color.">
+                    <a href="/buttn/edit/test" class="continue-buttn-setup">Continue to BUTTN Setup</a>
                 </div>
             </div>
         ''' if qr_img_b64 else ''}
