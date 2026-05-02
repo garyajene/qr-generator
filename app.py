@@ -1,4 +1,4 @@
- from flask import Flask, request, redirect
+from flask import Flask, request, redirect
 from io import BytesIO
 import base64
 import random
@@ -2076,8 +2076,8 @@ input[type="range"] {{ width:100%; }}
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
-      <div class="preview-note">Live Preview (updates instantly) — Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
-      <div id="live_buttn_preview" style="width:100%; min-height:680px; background:#ffffff;"></div>
+      <div class="preview-note">Preview opens after you save. Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
+      <div id="live_buttn_preview" style="width:100%; min-height:680px;"></div>
     </div>
   </div>
 </div>
