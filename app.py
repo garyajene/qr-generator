@@ -988,18 +988,6 @@ button {{
     <button type="submit">Generate</button>
 
     <div class="results">
-        {f"""
-        <div class="buttn-flow-panel" style="margin-top:22px; padding:18px; border:1px solid #ddd; border-radius:12px; background:#f7f7f7; max-width:640px;">
-            <div style="font-size:20px; font-weight:700; margin-bottom:6px;">Next: Build Your BUTTN Profile</div>
-            <div style="font-size:14px; color:#555; margin-bottom:14px;">Your QR is ready. Continue to add links, contact info, and profile design.</div>
-            <form action="/buttn/start/test" method="post">
-                <input type="hidden" name="art_data" value="{safe_art_data_b64}">
-                <input type="hidden" name="brand_color" value="{safe_current_bg_hex}">
-                <button type="submit" style="background:#111; color:#fff; border:0; border-radius:10px; padding:12px 18px; font-size:16px; cursor:pointer;">Continue to BUTTN Setup</button>
-            </form>
-        </div>
-        """ if qr_img_b64 else ""}
-
         {f'''
         <div class="preview-and-mockups">
             <div class="preview-column">
@@ -1764,6 +1752,302 @@ def home():
         current_bg_hex=current_bg_hex,
         qr_style=qr_style,
     )
+
+# -----------------------------
+# BUTTN PROFILE SYSTEM - SAFE ADD-ON
+# This section is intentionally separate from the QR generator above.
+# -----------------------------
+
+BUTTN_PROFILES = {
+    "test": {
+        "buttn_url": "test",
+        "name": "Gary Ajené",
+        "title": "T-Shirt Help Desk",
+        "phone": "",
+        "email": "",
+        "logo_b64": "",
+        "header_image_b64": "",
+        "header_bg_color": "#dfefff",
+        "header_image_opacity": "35",
+        "page_bg_color": "#f5f6f7",
+        "link_bg_color": "#ffffff",
+        "link_text_color": "#111111",
+        "link_border_color": "#d8dde6",
+        "links": [
+            {"label": "", "url": ""},
+            {"label": "", "url": ""},
+            {"label": "", "url": ""},
+            {"label": "", "url": ""},
+            {"label": "", "url": ""},
+        ],
+    }
+}
+
+
+def _clean_hex(value, fallback="#ffffff"):
+    parsed = parse_hex_color(value)
+    if parsed is None:
+        return fallback
+    return rgb_to_hex(parsed)
+
+
+def _safe_url(value):
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value.startswith("http://") or value.startswith("https://") or value.startswith("mailto:") or value.startswith("tel:"):
+        return value
+    return "https://" + value
+
+
+def _get_profile(username="test"):
+    username = (username or "test").strip().lower().replace(" ", "-")
+    return BUTTN_PROFILES.get(username) or BUTTN_PROFILES["test"]
+
+
+def _profile_logo_html(profile):
+    logo_b64 = profile.get("logo_b64", "")
+    if logo_b64:
+        return f'<img class="profile-logo-img" src="data:image/png;base64,{html.escape(logo_b64)}" alt="Logo">'
+    initial = html.escape((profile.get("name") or "B")[:1].upper())
+    return f'<div class="profile-logo-fallback">{initial}</div>'
+
+
+@app.route("/buttn/<username>")
+def buttn_public_profile(username):
+    profile = _get_profile(username)
+    safe_name = html.escape(profile.get("name", ""))
+    safe_title = html.escape(profile.get("title", ""))
+    safe_phone = html.escape(profile.get("phone", ""))
+    safe_email = html.escape(profile.get("email", ""))
+    safe_header_bg = _clean_hex(profile.get("header_bg_color"), "#dfefff")
+    safe_page_bg = _clean_hex(profile.get("page_bg_color"), "#f5f6f7")
+    safe_link_bg = _clean_hex(profile.get("link_bg_color"), "#ffffff")
+    safe_link_text = _clean_hex(profile.get("link_text_color"), "#111111")
+    safe_link_border = _clean_hex(profile.get("link_border_color"), "#d8dde6")
+
+    try:
+        opacity = max(0, min(100, int(profile.get("header_image_opacity") or 35))) / 100
+    except ValueError:
+        opacity = 0.35
+
+    header_image_b64 = profile.get("header_image_b64", "")
+    header_image_html = ""
+    if header_image_b64:
+        header_image_html = f'<div class="header-image" style="opacity:{opacity}; background-image:url(data:image/png;base64,{html.escape(header_image_b64)});"></div>'
+
+    action_buttons = ""
+    if safe_phone:
+        action_buttons += f'<a class="action-btn" href="tel:{safe_phone}">Call</a>'
+    if safe_email:
+        action_buttons += f'<a class="action-btn" href="mailto:{safe_email}">Email</a>'
+    action_buttons += '<a class="action-btn" href="#">Save</a>'
+
+    links_html = ""
+    for item in profile.get("links", []):
+        label = html.escape((item.get("label") or "").strip())
+        url = html.escape(_safe_url(item.get("url") or ""))
+        if label and url:
+            links_html += f'<a class="buttn-link" href="{url}" target="_blank" rel="noopener">{label}</a>'
+
+    if not links_html:
+        links_html = '<div class="empty-note">No links have been added yet.</div>'
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{safe_name} | BUTTN</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }}
+.phone-shell {{ max-width: 430px; margin: 0 auto; min-height: 100vh; background: {safe_page_bg}; box-shadow: 0 0 28px rgba(0,0,0,0.08); }}
+.profile-header {{ position: relative; min-height: 270px; padding: 58px 22px 28px; text-align: center; overflow: hidden; background: {safe_header_bg}; }}
+.header-image {{ position:absolute; inset:0; background-size:cover; background-position:center; z-index:0; }}
+.header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0.88)); z-index:1; }}
+.header-content {{ position: relative; z-index: 2; }}
+.profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
+.profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
+.profile-logo-fallback {{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:800; color:#111; background:#fff; }}
+.profile-name {{ font-size: 25px; font-weight: 800; color:#111; }}
+.profile-title {{ font-size: 15px; color:#555; margin-top: 6px; }}
+.actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
+.action-btn {{ text-decoration:none; color:#111; background:#fff; border:1px solid rgba(0,0,0,0.12); border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+.links-area {{ padding: 24px 20px 34px; }}
+.buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+.empty-note {{ text-align:center; color:#777; padding:18px; }}
+.buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
+</style>
+</head>
+<body>
+<div class="phone-shell">
+  <div class="profile-header">
+    {header_image_html}
+    <div class="header-soft-layer"></div>
+    <div class="header-content">
+      <div class="profile-logo">{_profile_logo_html(profile)}</div>
+      <div class="profile-name">{safe_name}</div>
+      <div class="profile-title">{safe_title}</div>
+      <div class="actions">{action_buttons}</div>
+    </div>
+  </div>
+  <div class="links-area">{links_html}</div>
+  <div class="buttn-footer">Powered by BUTTN</div>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/buttn/test")
+def buttn_test_alias():
+    return buttn_public_profile("test")
+
+
+@app.route("/buttn/edit/<username>", methods=["GET", "POST"])
+def buttn_edit_profile(username):
+    username = (username or "test").strip().lower().replace(" ", "-") or "test"
+    profile = BUTTN_PROFILES.get(username)
+    if profile is None:
+        profile = BUTTN_PROFILES["test"].copy()
+        profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
+
+    if request.method == "POST":
+        requested_url = (request.form.get("buttn_url") or username).strip().lower().replace(" ", "-") or "test"
+        profile["buttn_url"] = requested_url
+        profile["name"] = (request.form.get("name") or "").strip()
+        profile["title"] = (request.form.get("title") or "").strip()
+        profile["phone"] = (request.form.get("phone") or "").strip()
+        profile["email"] = (request.form.get("email") or "").strip()
+        profile["header_bg_color"] = _clean_hex(request.form.get("header_bg_color"), "#dfefff")
+        profile["page_bg_color"] = _clean_hex(request.form.get("page_bg_color"), "#f5f6f7")
+        profile["link_bg_color"] = _clean_hex(request.form.get("link_bg_color"), "#ffffff")
+        profile["link_text_color"] = _clean_hex(request.form.get("link_text_color"), "#111111")
+        profile["link_border_color"] = _clean_hex(request.form.get("link_border_color"), "#d8dde6")
+        try:
+            profile["header_image_opacity"] = str(max(0, min(100, int(request.form.get("header_image_opacity") or 35))))
+        except ValueError:
+            profile["header_image_opacity"] = "35"
+
+        logo = fetch_uploaded_image(request.files.get("logo_file"))
+        if logo is not None:
+            logo.thumbnail((600, 600), Image.LANCZOS)
+            profile["logo_b64"] = image_to_base64(logo)
+
+        header_img = fetch_uploaded_image(request.files.get("header_image_file"))
+        if header_img is not None:
+            header_img.thumbnail((1400, 900), Image.LANCZOS)
+            profile["header_image_b64"] = image_to_base64(header_img)
+
+        links = []
+        for i in range(1, 6):
+            links.append({
+                "label": (request.form.get(f"link{i}_label") or "").strip(),
+                "url": (request.form.get(f"link{i}_url") or "").strip(),
+            })
+        profile["links"] = links
+        BUTTN_PROFILES[requested_url] = profile
+        return redirect(f"/buttn/{requested_url}")
+
+    def val(key, fallback=""):
+        return html.escape(str(profile.get(key, fallback) or ""))
+
+    link_inputs = ""
+    existing_links = profile.get("links", [])
+    for i in range(1, 6):
+        item = existing_links[i - 1] if i - 1 < len(existing_links) else {"label": "", "url": ""}
+        link_inputs += f'''
+        <div class="link-edit-row">
+          <input type="text" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(item.get('label', ''))}">
+          <input type="text" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(item.get('url', ''))}">
+        </div>
+        '''
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUTTN Setup</title>
+<style>
+* {{ box-sizing:border-box; }}
+body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
+.builder-wrap {{ max-width:980px; margin:0 auto; padding:28px; }}
+.builder-head {{ margin-bottom:22px; }}
+.builder-head h1 {{ margin:0 0 8px; font-size:30px; }}
+.builder-head p {{ margin:0; color:#666; }}
+.builder-grid {{ display:grid; grid-template-columns:1fr 390px; gap:26px; align-items:start; }}
+.panel {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:20px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
+.panel h2 {{ margin:0 0 15px; font-size:19px; }}
+.field {{ margin-bottom:14px; }}
+label {{ display:block; font-weight:700; margin-bottom:7px; }}
+input[type="text"], input[type="email"], input[type="tel"], input[type="color"], input[type="file"] {{ width:100%; padding:11px; border:1px solid #cfd5df; border-radius:10px; font-size:15px; }}
+input[type="color"] {{ height:46px; padding:4px; }}
+input[type="range"] {{ width:100%; }}
+.color-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }}
+.link-edit-row {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }}
+.save-btn {{ width:100%; padding:15px; border:none; background:#111; color:#fff; font-size:17px; font-weight:800; border-radius:14px; cursor:pointer; }}
+.preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
+.preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
+.small-help {{ color:#777; font-size:13px; margin-top:6px; }}
+@media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} }}
+</style>
+</head>
+<body>
+<div class="builder-wrap">
+  <div class="builder-head">
+    <h1>Create Your BUTTN Profile</h1>
+    <p>Set up the page your QR code and NFC button will point to.</p>
+  </div>
+  <div class="builder-grid">
+    <form method="post" enctype="multipart/form-data">
+      <div class="panel">
+        <h2>Profile Identity</h2>
+        <div class="field"><label>BUTTN URL</label><input type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /buttn/tshirt-help-desk</div></div>
+        <div class="field"><label>Name / Brand</label><input type="text" name="name" value="{val('name')}"></div>
+        <div class="field"><label>Title / Company</label><input type="text" name="title" value="{val('title')}"></div>
+        <div class="field"><label>Phone</label><input type="tel" name="phone" value="{val('phone')}"></div>
+        <div class="field"><label>Email</label><input type="email" name="email" value="{val('email')}"></div>
+        <div class="field"><label>Logo Upload</label><input type="file" name="logo_file" accept="image/*"><div class="small-help">Later this will automatically carry over from the QR generator logo.</div></div>
+      </div>
+      <div class="panel">
+        <h2>Top Background</h2>
+        <div class="field"><label>Header Color</label><input type="color" name="header_bg_color" value="{val('header_bg_color', '#dfefff')}"></div>
+        <div class="field"><label>Optional Header Image</label><input type="file" name="header_image_file" accept="image/*"></div>
+        <div class="field"><label>Header Image Opacity</label><input type="range" name="header_image_opacity" min="0" max="100" value="{val('header_image_opacity', '35')}"></div>
+      </div>
+      <div class="panel">
+        <h2>Links</h2>
+        {link_inputs}
+      </div>
+      <div class="panel">
+        <h2>Colors</h2>
+        <div class="color-grid">
+          <div class="field"><label>Page Background</label><input type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f6f7')}"></div>
+          <div class="field"><label>Button Color</label><input type="color" name="link_bg_color" value="{val('link_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Button Text</label><input type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
+          <div class="field"><label>Button Border</label><input type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
+        </div>
+      </div>
+      <button class="save-btn" type="submit">Save & Preview</button>
+    </form>
+    <div class="preview-card">
+      <div class="preview-note">Preview opens after you save. Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
+      <iframe src="/buttn/{html.escape(username)}" style="width:100%; height:680px; border:0;"></iframe>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/buttn/edit/test", methods=["GET", "POST"])
+def buttn_edit_test_alias():
+    return buttn_edit_profile("test")
 
 
 if __name__ == "__main__":
