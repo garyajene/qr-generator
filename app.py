@@ -2229,20 +2229,16 @@ def buttn_edit_test_alias():
 @app.route("/test-granite")
 def test_granite():
     import replicate
-    import os
 
-    output = ""
-
-    for event in replicate.stream(
+    output = replicate.run(
         "ibm-granite/granite-3.3-8b-instruct",
         input={
             "prompt": "Say hello in one short sentence.",
             "max_completion_tokens": 50
-        },
-    ):
-        output += str(event)
+        }
+    )
 
-    return output
+    return str(output)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
