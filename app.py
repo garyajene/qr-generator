@@ -1781,14 +1781,14 @@ BUTTN_PROFILES = {
         "email": "",
         "logo_b64": "",
         "header_image_b64": "",
-        "header_bg_color": "#dfefff",
+        "header_bg_color": "#9d5d4d",
         "header_image_opacity": "35",
-        "page_bg_color": "#f5f6f7",
-        "link_bg_color": "#ffffff",
+        "page_bg_color": "#f5f5f5",
+        "link_bg_color": "#e8e8ee",
         "link_text_color": "#111111",
         "link_border_color": "#d8dde6",
         "links": [
-            {"label": "", "url": ""},
+            {"label": "Button Text", "url": ""},
             {"label": "", "url": ""},
             {"label": "", "url": ""},
             {"label": "", "url": ""},
@@ -1861,9 +1861,9 @@ def buttn_public_profile(username):
     safe_title = html.escape(profile.get("title", ""))
     safe_phone = html.escape(profile.get("phone", ""))
     safe_email = html.escape(profile.get("email", ""))
-    safe_header_bg = _clean_hex(profile.get("header_bg_color"), "#dfefff")
-    safe_page_bg = _clean_hex(profile.get("page_bg_color"), "#f5f6f7")
-    safe_link_bg = _clean_hex(profile.get("link_bg_color"), "#ffffff")
+    safe_header_bg = _clean_hex(profile.get("header_bg_color"), "#9d5d4d")
+    safe_page_bg = _clean_hex(profile.get("page_bg_color"), "#f5f5f5")
+    safe_link_bg = _clean_hex(profile.get("link_bg_color"), "#e8e8ee")
     safe_link_text = _clean_hex(profile.get("link_text_color"), "#111111")
     safe_link_border = _clean_hex(profile.get("link_border_color"), "#d8dde6")
 
@@ -1962,9 +1962,9 @@ def buttn_edit_profile(username):
         profile["title"] = (request.form.get("title") or "").strip()
         profile["phone"] = (request.form.get("phone") or "").strip()
         profile["email"] = (request.form.get("email") or "").strip()
-        profile["header_bg_color"] = _clean_hex(request.form.get("header_bg_color"), "#dfefff")
-        profile["page_bg_color"] = _clean_hex(request.form.get("page_bg_color"), "#f5f6f7")
-        profile["link_bg_color"] = _clean_hex(request.form.get("link_bg_color"), "#ffffff")
+        profile["header_bg_color"] = _clean_hex(request.form.get("header_bg_color"), "#9d5d4d")
+        profile["page_bg_color"] = _clean_hex(request.form.get("page_bg_color"), "#f5f5f5")
+        profile["link_bg_color"] = _clean_hex(request.form.get("link_bg_color"), "#e8e8ee")
         profile["link_text_color"] = _clean_hex(request.form.get("link_text_color"), "#111111")
         profile["link_border_color"] = _clean_hex(request.form.get("link_border_color"), "#d8dde6")
         try:
@@ -1999,12 +1999,17 @@ def buttn_edit_profile(username):
     existing_links = profile.get("links", [])
     for i in range(1, 6):
         item = existing_links[i - 1] if i - 1 < len(existing_links) else {"label": "", "url": ""}
+        label_value = item.get("label", "")
+        url_value = item.get("url", "")
+        if i == 1 and not label_value:
+            label_value = "Button Text"
         link_inputs += f'''
         <div class="link-edit-row">
-          <input type="text" class="live-link-label" data-link-index="{i}" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(item.get('label', ''))}">
-          <input type="text" class="live-link-url" data-link-index="{i}" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(item.get('url', ''))}">
+          <input type="text" class="live-link-label" data-link-index="{i}" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(label_value)}">
+          <input type="text" class="live-link-url" data-link-index="{i}" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(url_value)}">
         </div>
         '''
+
 
     return f"""
 <!doctype html>
@@ -2052,11 +2057,11 @@ input[type="range"] {{ width:100%; }}
         <div class="field"><label>Title / Company</label><input id="title_input" type="text" name="title" value="{val('title')}"></div>
         <div class="field"><label>Phone</label><input id="phone_input" type="tel" name="phone" value="{val('phone')}"></div>
         <div class="field"><label>Email</label><input id="email_input" type="email" name="email" value="{val('email')}"></div>
-        <div class="field"><label>Logo Upload</label><input id="logo_file_input" type="file" name="logo_file" accept="image/*"><div class="small-help">Later this will automatically carry over from the QR generator logo.</div></div>
+        <div class="field"><label>Change Logo</label><input id="logo_file_input" type="file" name="logo_file" accept="image/*"><div class="small-help">This logo carries over from the QR generator. Upload here only if you want to change it.</div></div>
       </div>
       <div class="panel">
         <h2>Top Background</h2>
-        <div class="field"><label>Header Color</label><input id="header_bg_color_input" type="color" name="header_bg_color" value="{val('header_bg_color', '#dfefff')}"></div>
+        <div class="field"><label>Header Color</label><input id="header_bg_color_input" type="color" name="header_bg_color" value="{val('header_bg_color', '#9d5d4d')}"></div>
         <div class="field"><label>Optional Header Image</label><input id="header_image_file_input" type="file" name="header_image_file" accept="image/*"></div>
         <div class="field"><label>Header Image Opacity</label><input id="header_image_opacity_input" type="range" name="header_image_opacity" min="0" max="100" value="{val('header_image_opacity', '35')}"></div>
       </div>
@@ -2067,8 +2072,8 @@ input[type="range"] {{ width:100%; }}
       <div class="panel">
         <h2>Colors</h2>
         <div class="color-grid">
-          <div class="field"><label>Page Background</label><input id="page_bg_color_input" type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f6f7')}"></div>
-          <div class="field"><label>Button Color</label><input id="link_bg_color_input" type="color" name="link_bg_color" value="{val('link_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Page Background</label><input id="page_bg_color_input" type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f5f5')}"></div>
+          <div class="field"><label>Button Color</label><input id="link_bg_color_input" type="color" name="link_bg_color" value="{val('link_bg_color', '#e8e8ee')}"></div>
           <div class="field"><label>Button Text</label><input id="link_text_color_input" type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
           <div class="field"><label>Button Border</label><input id="link_border_color_input" type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
         </div>
@@ -2119,10 +2124,16 @@ function collectLinks() {{
     const urls = Array.from(document.querySelectorAll(".live-link-url"));
     let html = "";
     for (let i = 0; i < labels.length; i++) {{
-        const label = (labels[i].value || "").trim();
+        let label = (labels[i].value || "").trim();
         const url = (urls[i] ? urls[i].value : "").trim();
-        if (label && url) {{
-            html += `<a class="buttn-link" href="${{escapeHtml(safeUrl(url))}}" target="_blank" rel="noopener">${{escapeHtml(label)}}</a>`;
+
+        if (i === 0 && !label) {{
+            label = "Button Text";
+        }}
+
+        if (label) {{
+            const href = url ? safeUrl(url) : "#";
+            html += `<a class="buttn-link" href="${{escapeHtml(href)}}" target="_blank" rel="noopener">${{escapeHtml(label)}}</a>`;
         }}
     }}
     return html || '<div class="empty-note">No links have been added yet.</div>';
@@ -2135,9 +2146,9 @@ function renderLivePreview() {{
     const title = getVal("title_input", "Title / Company");
     const phone = getVal("phone_input", "");
     const email = getVal("email_input", "");
-    const headerBg = getVal("header_bg_color_input", "#dfefff");
-    const pageBg = getVal("page_bg_color_input", "#f5f6f7");
-    const linkBg = getVal("link_bg_color_input", "#ffffff");
+    const headerBg = getVal("header_bg_color_input", "#9d5d4d");
+    const pageBg = getVal("page_bg_color_input", "#f5f5f5");
+    const linkBg = getVal("link_bg_color_input", "#e8e8ee");
     const linkText = getVal("link_text_color_input", "#111111");
     const linkBorder = getVal("link_border_color_input", "#d8dde6");
     const opacity = Math.max(0, Math.min(100, parseInt(getVal("header_image_opacity_input", "35"), 10) || 35)) / 100;
