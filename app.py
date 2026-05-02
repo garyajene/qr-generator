@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, redirect
 from io import BytesIO
 import base64
 import random
@@ -988,6 +988,18 @@ button {{
     <button type="submit">Generate</button>
 
     <div class="results">
+        {f"""
+        <div class="buttn-flow-panel" style="margin-top:22px; padding:18px; border:1px solid #ddd; border-radius:12px; background:#f7f7f7; max-width:640px;">
+            <div style="font-size:20px; font-weight:700; margin-bottom:6px;">Next: Build Your BUTTN Profile</div>
+            <div style="font-size:14px; color:#555; margin-bottom:14px;">Your QR is ready. Continue to add links, contact info, and profile design.</div>
+            <form action="/buttn/start/test" method="post">
+                <input type="hidden" name="art_data" value="{safe_art_data_b64}">
+                <input type="hidden" name="brand_color" value="{safe_current_bg_hex}">
+                <button type="submit" style="background:#111; color:#fff; border:0; border-radius:10px; padding:12px 18px; font-size:16px; cursor:pointer;">Continue to BUTTN Setup</button>
+            </form>
+        </div>
+        """ if qr_img_b64 else ""}
+
         {f'''
         <div class="preview-and-mockups">
             <div class="preview-column">
