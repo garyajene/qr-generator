@@ -6,6 +6,7 @@ from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
 import html
+import json
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -1006,7 +1007,7 @@ button {{
                 <div class="result-block">
                     <h2>Generated QR</h2>
                     <img class="generated-qr" src="data:image/png;base64,{qr_img_b64}" alt="Click the QR image to sample a color.">
-                    <a href="/buttn/edit/test" class="continue-buttn-setup">Continue to BUTTN Setup</a>
+                    <button type="submit" formaction="/buttn/start/test" formmethod="post" formenctype="multipart/form-data" class="continue-buttn-setup">Continue to BUTTN Setup</button>
                 </div>
             </div>
         ''' if qr_img_b64 else ''}
@@ -1826,6 +1827,33 @@ def _profile_logo_html(profile):
     return f'<div class="profile-logo-fallback">{initial}</div>'
 
 
+@app.route("/buttn/start/<username>", methods=["POST"])
+def buttn_start_from_qr(username):
+    username = (username or "test").strip().lower().replace(" ", "-") or "test"
+
+    profile = BUTTN_PROFILES.get(username)
+    if profile is None:
+        profile = BUTTN_PROFILES["test"].copy()
+        profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
+
+    # Carry the uploaded QR artwork/logo forward into the BUTTN profile.
+    logo_img = fetch_uploaded_image(request.files.get("artfile"))
+    if logo_img is None:
+        logo_img = fetch_image_from_hidden_b64((request.form.get("art_data") or "").strip())
+
+    if logo_img is not None:
+        logo_img.thumbnail((600, 600), Image.LANCZOS)
+        profile["logo_b64"] = image_to_base64(logo_img)
+
+    bg_override = (request.form.get("bg_override") or "").strip()
+    parsed_bg = parse_hex_color(bg_override)
+    if parsed_bg is not None:
+        profile["header_bg_color"] = rgb_to_hex(parsed_bg)
+
+    BUTTN_PROFILES[username] = profile
+    return redirect(f"/buttn/edit/{username}")
+
+
 @app.route("/buttn/<username>")
 def buttn_public_profile(username):
     profile = _get_profile(username)
@@ -1973,8 +2001,8 @@ def buttn_edit_profile(username):
         item = existing_links[i - 1] if i - 1 < len(existing_links) else {"label": "", "url": ""}
         link_inputs += f'''
         <div class="link-edit-row">
-          <input type="text" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(item.get('label', ''))}">
-          <input type="text" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(item.get('url', ''))}">
+          <input type="text" class="live-link-label" data-link-index="{i}" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(item.get('label', ''))}">
+          <input type="text" class="live-link-url" data-link-index="{i}" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(item.get('url', ''))}">
         </div>
         '''
 
@@ -2019,18 +2047,18 @@ input[type="range"] {{ width:100%; }}
     <form method="post" enctype="multipart/form-data">
       <div class="panel">
         <h2>Profile Identity</h2>
-        <div class="field"><label>BUTTN URL</label><input type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /buttn/tshirt-help-desk</div></div>
-        <div class="field"><label>Name / Brand</label><input type="text" name="name" value="{val('name')}"></div>
-        <div class="field"><label>Title / Company</label><input type="text" name="title" value="{val('title')}"></div>
-        <div class="field"><label>Phone</label><input type="tel" name="phone" value="{val('phone')}"></div>
-        <div class="field"><label>Email</label><input type="email" name="email" value="{val('email')}"></div>
-        <div class="field"><label>Logo Upload</label><input type="file" name="logo_file" accept="image/*"><div class="small-help">Later this will automatically carry over from the QR generator logo.</div></div>
+        <div class="field"><label>BUTTN URL</label><input id="buttn_url_input" type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /buttn/tshirt-help-desk</div></div>
+        <div class="field"><label>Name / Brand</label><input id="name_input" type="text" name="name" value="{val('name')}"></div>
+        <div class="field"><label>Title / Company</label><input id="title_input" type="text" name="title" value="{val('title')}"></div>
+        <div class="field"><label>Phone</label><input id="phone_input" type="tel" name="phone" value="{val('phone')}"></div>
+        <div class="field"><label>Email</label><input id="email_input" type="email" name="email" value="{val('email')}"></div>
+        <div class="field"><label>Logo Upload</label><input id="logo_file_input" type="file" name="logo_file" accept="image/*"><div class="small-help">Later this will automatically carry over from the QR generator logo.</div></div>
       </div>
       <div class="panel">
         <h2>Top Background</h2>
-        <div class="field"><label>Header Color</label><input type="color" name="header_bg_color" value="{val('header_bg_color', '#dfefff')}"></div>
-        <div class="field"><label>Optional Header Image</label><input type="file" name="header_image_file" accept="image/*"></div>
-        <div class="field"><label>Header Image Opacity</label><input type="range" name="header_image_opacity" min="0" max="100" value="{val('header_image_opacity', '35')}"></div>
+        <div class="field"><label>Header Color</label><input id="header_bg_color_input" type="color" name="header_bg_color" value="{val('header_bg_color', '#dfefff')}"></div>
+        <div class="field"><label>Optional Header Image</label><input id="header_image_file_input" type="file" name="header_image_file" accept="image/*"></div>
+        <div class="field"><label>Header Image Opacity</label><input id="header_image_opacity_input" type="range" name="header_image_opacity" min="0" max="100" value="{val('header_image_opacity', '35')}"></div>
       </div>
       <div class="panel">
         <h2>Links</h2>
@@ -2039,20 +2067,143 @@ input[type="range"] {{ width:100%; }}
       <div class="panel">
         <h2>Colors</h2>
         <div class="color-grid">
-          <div class="field"><label>Page Background</label><input type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f6f7')}"></div>
-          <div class="field"><label>Button Color</label><input type="color" name="link_bg_color" value="{val('link_bg_color', '#ffffff')}"></div>
-          <div class="field"><label>Button Text</label><input type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
-          <div class="field"><label>Button Border</label><input type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
+          <div class="field"><label>Page Background</label><input id="page_bg_color_input" type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f6f7')}"></div>
+          <div class="field"><label>Button Color</label><input id="link_bg_color_input" type="color" name="link_bg_color" value="{val('link_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Button Text</label><input id="link_text_color_input" type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
+          <div class="field"><label>Button Border</label><input id="link_border_color_input" type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
         </div>
       </div>
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
       <div class="preview-note">Preview opens after you save. Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
-      <iframe src="/buttn/{html.escape(username)}" style="width:100%; height:680px; border:0;"></iframe>
+      <div id="live_buttn_preview" style="width:100%; min-height:680px;"></div>
     </div>
   </div>
 </div>
+<script>
+const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
+const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
+let liveLogoData = existingLogoData;
+let liveHeaderImageData = existingHeaderImageData;
+
+function getEl(id) {{ return document.getElementById(id); }}
+function getVal(id, fallback) {{ const el = getEl(id); return el ? (el.value || fallback || "") : (fallback || ""); }}
+function escapeHtml(value) {{
+    return String(value || "").replace(/[&<>"']/g, function(ch) {{
+        return {{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}}[ch];
+    }});
+}}
+function safeUrl(value) {{
+    let v = String(value || "").trim();
+    if (!v) return "";
+    if (v.startsWith("http://") || v.startsWith("https://") || v.startsWith("mailto:") || v.startsWith("tel:")) return v;
+    return "https://" + v;
+}}
+function readImageFile(input, callback) {{
+    if (!input || !input.files || !input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {{
+        const result = e.target.result || "";
+        const parts = result.split(",");
+        callback(parts.length === 2 ? parts[1] : "");
+        renderLivePreview();
+    }};
+    reader.readAsDataURL(input.files[0]);
+}}
+function collectLinks() {{
+    const labels = Array.from(document.querySelectorAll(".live-link-label"));
+    const urls = Array.from(document.querySelectorAll(".live-link-url"));
+    let html = "";
+    for (let i = 0; i < labels.length; i++) {{
+        const label = (labels[i].value || "").trim();
+        const url = (urls[i] ? urls[i].value : "").trim();
+        if (label && url) {{
+            html += `<a class="buttn-link" href="${{escapeHtml(safeUrl(url))}}" target="_blank" rel="noopener">${{escapeHtml(label)}}</a>`;
+        }}
+    }}
+    return html || '<div class="empty-note">No links have been added yet.</div>';
+}}
+function renderLivePreview() {{
+    const root = getEl("live_buttn_preview");
+    if (!root) return;
+
+    const name = getVal("name_input", "Your Name");
+    const title = getVal("title_input", "Title / Company");
+    const phone = getVal("phone_input", "");
+    const email = getVal("email_input", "");
+    const headerBg = getVal("header_bg_color_input", "#dfefff");
+    const pageBg = getVal("page_bg_color_input", "#f5f6f7");
+    const linkBg = getVal("link_bg_color_input", "#ffffff");
+    const linkText = getVal("link_text_color_input", "#111111");
+    const linkBorder = getVal("link_border_color_input", "#d8dde6");
+    const opacity = Math.max(0, Math.min(100, parseInt(getVal("header_image_opacity_input", "35"), 10) || 35)) / 100;
+    const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
+    const logoHtml = liveLogoData
+        ? `<img class="profile-logo-img" src="data:image/png;base64,${{liveLogoData}}" alt="Logo">`
+        : `<div class="profile-logo-fallback">${{initial}}</div>`;
+    const headerImageHtml = liveHeaderImageData
+        ? `<div class="header-image" style="opacity:${{opacity}}; background-image:url(data:image/png;base64,${{liveHeaderImageData}});"></div>`
+        : "";
+
+    let actions = "";
+    if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
+    if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
+    actions += '<a class="action-btn" href="#">Save</a>';
+
+    root.innerHTML = `
+<style>
+#live_buttn_preview * {{ box-sizing: border-box; }}
+#live_buttn_preview .phone-shell {{ max-width: 430px; margin: 0 auto; min-height: 680px; background: ${{pageBg}}; }}
+#live_buttn_preview .profile-header {{ position: relative; min-height: 270px; padding: 58px 22px 28px; text-align: center; overflow: hidden; background: ${{headerBg}}; }}
+#live_buttn_preview .header-image {{ position:absolute; inset:0; background-size:cover; background-position:center; z-index:0; }}
+#live_buttn_preview .header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0.88)); z-index:1; }}
+#live_buttn_preview .header-content {{ position: relative; z-index: 2; }}
+#live_buttn_preview .profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
+#live_buttn_preview .profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
+#live_buttn_preview .profile-logo-fallback {{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:800; color:#111; background:#fff; }}
+#live_buttn_preview .profile-name {{ font-size: 25px; font-weight: 800; color:#111; }}
+#live_buttn_preview .profile-title {{ font-size: 15px; color:#555; margin-top: 6px; }}
+#live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
+#live_buttn_preview .action-btn {{ text-decoration:none; color:#111; background:#fff; border:1px solid rgba(0,0,0,0.12); border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+#live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
+#live_buttn_preview .buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+#live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
+#live_buttn_preview .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
+</style>
+<div class="phone-shell">
+  <div class="profile-header">
+    ${{headerImageHtml}}
+    <div class="header-soft-layer"></div>
+    <div class="header-content">
+      <div class="profile-logo">${{logoHtml}}</div>
+      <div class="profile-name">${{escapeHtml(name)}}</div>
+      <div class="profile-title">${{escapeHtml(title)}}</div>
+      <div class="actions">${{actions}}</div>
+    </div>
+  </div>
+  <div class="links-area">${{collectLinks()}}</div>
+  <div class="buttn-footer">Powered by BUTTN</div>
+</div>`;
+}}
+
+[
+ "buttn_url_input", "name_input", "title_input", "phone_input", "email_input",
+ "header_bg_color_input", "header_image_opacity_input", "page_bg_color_input",
+ "link_bg_color_input", "link_text_color_input", "link_border_color_input"
+].forEach(function(id) {{
+    const el = getEl(id);
+    if (el) el.addEventListener("input", renderLivePreview);
+}});
+document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
+    el.addEventListener("input", renderLivePreview);
+}});
+const logoInput = getEl("logo_file_input");
+const headerInput = getEl("header_image_file_input");
+if (logoInput) logoInput.addEventListener("change", function() {{ readImageFile(logoInput, function(data) {{ liveLogoData = data; }}); }});
+if (headerInput) headerInput.addEventListener("change", function() {{ readImageFile(headerInput, function(data) {{ liveHeaderImageData = data; }}); }});
+renderLivePreview();
+</script>
 </body>
 </html>
 """
