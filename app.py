@@ -2247,7 +2247,11 @@ def chatbot():
                 }
             )
 
-            bot_response = str(output)
+            # clean output
+            if isinstance(output, list):
+                bot_response = "".join(output)
+            else:
+                bot_response = str(output)
 
     return f"""
     <!doctype html>
@@ -2286,20 +2290,33 @@ def chatbot():
                 background: #f0f0f0;
                 border-radius: 10px;
                 white-space: pre-wrap;
+                min-height: 60px;
+            }}
+            .thinking {{
+                color: #888;
+                font-style: italic;
             }}
         </style>
+
+        <script>
+        function showThinking() {{
+            const box = document.getElementById("responseBox");
+            box.innerHTML = "<span class='thinking'>Thinking...</span>";
+        }}
+        </script>
+
     </head>
     <body>
         <div class="chatbox">
             <h1>Granite Chatbot</h1>
 
-            <form method="post">
+            <form method="post" onsubmit="showThinking()">
                 <textarea name="message" placeholder="Ask something...">{html.escape(user_message)}</textarea>
                 <br>
                 <button type="submit">Send</button>
             </form>
 
-            <div class="response">
+            <div class="response" id="responseBox">
                 {html.escape(bot_response)}
             </div>
         </div>
