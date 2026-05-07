@@ -3,4 +3,3 @@ segno
 pillow
 requests
 gunicorn
-replicate
