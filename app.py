@@ -2184,7 +2184,8 @@ function renderLivePreview() {{
     const linkBg = getVal("link_bg_color_input", "#e8e8ee");
     const linkText = getVal("link_text_color_input", "#111111");
     const linkBorder = getVal("link_border_color_input", "#d8dde6");
-    const opacity = Math.max(0, Math.min(100, parseInt(getVal("header_image_opacity_input", "35"), 10) || 35)) / 100;
+    const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
+    const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
     const logoHtml = liveLogoData
         ? `<img class="profile-logo-img" src="data:image/png;base64,${{liveLogoData}}" alt="Logo">`
@@ -2259,103 +2260,3 @@ renderLivePreview();
 @app.route("/buttn/edit/test", methods=["GET", "POST"])
 def buttn_edit_test_alias():
     return buttn_edit_profile("test")
-@app.route("/chatbot", methods=["GET", "POST"])
-def chatbot():
-    import replicate
-    import html
-
-    user_message = ""
-    bot_response = ""
-
-    if request.method == "POST":
-        user_message = (request.form.get("message") or "").strip()
-
-        if user_message:
-            output = replicate.run(
-                "ibm-granite/granite-3.3-8b-instruct",
-                input={
-                    "prompt": user_message,
-                    "max_completion_tokens": 500,
-                    "temperature": 0.6
-                }
-            )
-
-            # clean output
-            if isinstance(output, list):
-                bot_response = "".join(output)
-            else:
-                bot_response = str(output)
-
-    return f"""
-    <!doctype html>
-    <html>
-    <head>
-        <title>Granite Chatbot</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background: #f5f5f5;
-                padding: 40px;
-            }}
-            .chatbox {{
-                max-width: 700px;
-                margin: 0 auto;
-                background: white;
-                padding: 25px;
-                border-radius: 14px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-            }}
-            textarea {{
-                width: 100%;
-                height: 120px;
-                padding: 12px;
-                font-size: 16px;
-            }}
-            button {{
-                margin-top: 12px;
-                padding: 12px 20px;
-                font-size: 16px;
-                cursor: pointer;
-            }}
-            .response {{
-                margin-top: 25px;
-                padding: 18px;
-                background: #f0f0f0;
-                border-radius: 10px;
-                white-space: pre-wrap;
-                min-height: 60px;
-            }}
-            .thinking {{
-                color: #888;
-                font-style: italic;
-            }}
-        </style>
-
-        <script>
-        function showThinking() {{
-            const box = document.getElementById("responseBox");
-            box.innerHTML = "<span class='thinking'>Thinking...</span>";
-        }}
-        </script>
-
-    </head>
-    <body>
-        <div class="chatbox">
-            <h1>Granite Chatbot</h1>
-
-            <form method="post" onsubmit="showThinking()">
-                <textarea name="message" placeholder="Ask something...">{html.escape(user_message)}</textarea>
-                <br>
-                <button type="submit">Send</button>
-            </form>
-
-            <div class="response" id="responseBox">
-                {html.escape(bot_response)}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
