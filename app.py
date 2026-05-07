@@ -1805,6 +1805,39 @@ def _clean_hex(value, fallback="#ffffff"):
     return rgb_to_hex(parsed)
 
 
+
+
+RESERVED_BUTTN_URLS = {
+    "admin", "login", "signup", "support", "help",
+    "api", "settings", "dashboard"
+}
+
+
+def _normalize_buttn_url(value):
+    value = (value or "").strip().lower().replace(" ", "-")
+    cleaned = "".join(ch for ch in value if ch.isalnum() or ch == "-")
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return cleaned.strip("-")
+
+
+def _is_buttn_url_taken(url_value, current_username=None):
+    normalized = _normalize_buttn_url(url_value)
+
+    if not normalized:
+        return False
+
+    if normalized in RESERVED_BUTTN_URLS:
+        return True
+
+    for existing in BUTTN_PROFILES.keys():
+        if existing == current_username:
+            continue
+        if existing == normalized:
+            return True
+
+    return False
+
 def _safe_url(value):
     value = (value or "").strip()
     if not value:
@@ -1907,7 +1940,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .phone-shell {{ max-width: 430px; margin: 0 auto; min-height: 100vh; background: {safe_page_bg}; box-shadow: 0 0 28px rgba(0,0,0,0.08); }}
 .profile-header {{ position: relative; min-height: 270px; padding: 58px 22px 28px; text-align: center; overflow: hidden; background: {safe_header_bg}; }}
 .header-image {{ position:absolute; inset:0; background-size:cover; background-position:center; z-index:0; }}
-.header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0.88)); z-index:1; }}
+.header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0.28)); z-index:1; }}
 .header-content {{ position: relative; z-index: 2; }}
 .profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
 .profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
@@ -2081,8 +2114,8 @@ input[type="range"] {{ width:100%; }}
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
-      <div class="preview-note">Preview opens after you save. Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
-      <div id="live_buttn_preview" style="width:100%; min-height:680px;"></div>
+      <div class="preview-note">Live Preview (updates instantly) — Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
+      <div id="live_buttn_preview" style="width:100%; min-height:680px; background:#ffffff;"></div>
     </div>
   </div>
 </div>
@@ -2171,7 +2204,7 @@ function renderLivePreview() {{
 #live_buttn_preview .phone-shell {{ max-width: 430px; margin: 0 auto; min-height: 680px; background: ${{pageBg}}; }}
 #live_buttn_preview .profile-header {{ position: relative; min-height: 270px; padding: 58px 22px 28px; text-align: center; overflow: hidden; background: ${{headerBg}}; }}
 #live_buttn_preview .header-image {{ position:absolute; inset:0; background-size:cover; background-position:center; z-index:0; }}
-#live_buttn_preview .header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0.88)); z-index:1; }}
+#live_buttn_preview .header-soft-layer {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0.28)); z-index:1; }}
 #live_buttn_preview .header-content {{ position: relative; z-index: 2; }}
 #live_buttn_preview .profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
 #live_buttn_preview .profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
