@@ -972,7 +972,7 @@ button {{
 
 <h1>QR Generator</h1>
 
-<form action="/" method="post" enctype="multipart/form-data">
+<form action="/generate" method="post" enctype="multipart/form-data">
     <div class="label">QR Data</div>
     <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
 
@@ -1713,7 +1713,7 @@ if (currentBgLabel) {{
 """
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/generate", methods=["GET", "POST"])
 def home():
     qr_b64 = None
     card_mockup_b64 = None
