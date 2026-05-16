@@ -21,7 +21,7 @@ def parse_hex_color(value):
         return None
 
     value = value.strip()
-    if not value:
+    if not value: 
         return None
 
     if value.startswith("#"):
@@ -2149,15 +2149,6 @@ input[type="range"] {{ width:100%; }}
         {link_inputs}
       </div>
       <div class="panel">
-        <h2>Colors</h2>
-        <div class="color-grid">
-          <div class="field"><label>Page Background</label><input id="page_bg_color_input" type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f5f5')}"></div>
-          <div class="field"><label>Button Color</label><input id="link_bg_color_input" type="color" name="link_bg_color" value="{val('link_bg_color', '#e8e8ee')}"></div>
-          <div class="field"><label>Button Text</label><input id="link_text_color_input" type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
-          <div class="field"><label>Button Border</label><input id="link_border_color_input" type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
-        </div>
-      </div>
-      <div class="panel">
         <h2>Header Text & Actions</h2>
         <div class="color-grid">
           <div class="field"><label>Name Text</label><input id="header_name_color_input" type="color" name="header_name_color" value="{val('header_name_color', '#111111')}"></div>
@@ -2165,6 +2156,15 @@ input[type="range"] {{ width:100%; }}
           <div class="field"><label>Action Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
           <div class="field"><label>Action Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
           <div class="field"><label>Action Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Colors</h2>
+        <div class="color-grid">
+          <div class="field"><label>Page Background</label><input id="page_bg_color_input" type="color" name="page_bg_color" value="{val('page_bg_color', '#f5f5f5')}"></div>
+          <div class="field"><label>Button Color</label><input id="link_bg_color_input" type="color" name="link_bg_color" value="{val('link_bg_color', '#e8e8ee')}"></div>
+          <div class="field"><label>Button Text</label><input id="link_text_color_input" type="color" name="link_text_color" value="{val('link_text_color', '#111111')}"></div>
+          <div class="field"><label>Button Border</label><input id="link_border_color_input" type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
         </div>
       </div>
       <button class="save-btn" type="submit">Save & Preview</button>
