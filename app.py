@@ -1818,6 +1818,11 @@ BUTTN_PROFILES = {
         "link_bg_color": "#e8e8ee",
         "link_text_color": "#111111",
         "link_border_color": "#d8dde6",
+        "header_name_color": "#111111",
+        "header_title_color": "#555555",
+        "action_bg_color": "#ffffff",
+        "action_text_color": "#111111",
+        "action_border_color": "#d8dde6",
         "links": [
             {"label": "Button Text", "url": ""},
             {"label": "", "url": ""},
@@ -1930,6 +1935,11 @@ def buttn_public_profile(username):
     safe_link_bg = _clean_hex(profile.get("link_bg_color"), "#e8e8ee")
     safe_link_text = _clean_hex(profile.get("link_text_color"), "#111111")
     safe_link_border = _clean_hex(profile.get("link_border_color"), "#d8dde6")
+    safe_header_name_color = _clean_hex(profile.get("header_name_color"), "#111111")
+    safe_header_title_color = _clean_hex(profile.get("header_title_color"), "#555555")
+    safe_action_bg = _clean_hex(profile.get("action_bg_color"), "#ffffff")
+    safe_action_text = _clean_hex(profile.get("action_text_color"), "#111111")
+    safe_action_border = _clean_hex(profile.get("action_border_color"), "#d8dde6")
 
     try:
         opacity = max(0, min(100, int(profile.get("header_image_opacity") or 35))) / 100
@@ -1976,10 +1986,10 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
 .profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
 .profile-logo-fallback {{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:800; color:#111; background:#fff; }}
-.profile-name {{ font-size: 25px; font-weight: 800; color:#111; }}
-.profile-title {{ font-size: 15px; color:#555; margin-top: 6px; }}
+.profile-name {{ font-size: 25px; font-weight: 800; color:{safe_header_name_color}; }}
+.profile-title {{ font-size: 15px; color:{safe_header_title_color}; margin-top: 6px; }}
 .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
-.action-btn {{ text-decoration:none; color:#111; background:#fff; border:1px solid rgba(0,0,0,0.12); border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+.action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 .links-area {{ padding: 24px 20px 34px; }}
 .buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
@@ -2031,6 +2041,11 @@ def buttn_edit_profile(username):
         profile["link_bg_color"] = _clean_hex(request.form.get("link_bg_color"), "#e8e8ee")
         profile["link_text_color"] = _clean_hex(request.form.get("link_text_color"), "#111111")
         profile["link_border_color"] = _clean_hex(request.form.get("link_border_color"), "#d8dde6")
+        profile["header_name_color"] = _clean_hex(request.form.get("header_name_color"), "#111111")
+        profile["header_title_color"] = _clean_hex(request.form.get("header_title_color"), "#555555")
+        profile["action_bg_color"] = _clean_hex(request.form.get("action_bg_color"), "#ffffff")
+        profile["action_text_color"] = _clean_hex(request.form.get("action_text_color"), "#111111")
+        profile["action_border_color"] = _clean_hex(request.form.get("action_border_color"), "#d8dde6")
         try:
             profile["header_image_opacity"] = str(max(0, min(100, int(request.form.get("header_image_opacity") or 35))))
         except ValueError:
@@ -2142,6 +2157,16 @@ input[type="range"] {{ width:100%; }}
           <div class="field"><label>Button Border</label><input id="link_border_color_input" type="color" name="link_border_color" value="{val('link_border_color', '#d8dde6')}"></div>
         </div>
       </div>
+      <div class="panel">
+        <h2>Header Text & Actions</h2>
+        <div class="color-grid">
+          <div class="field"><label>Name Text</label><input id="header_name_color_input" type="color" name="header_name_color" value="{val('header_name_color', '#111111')}"></div>
+          <div class="field"><label>Title Text</label><input id="header_title_color_input" type="color" name="header_title_color" value="{val('header_title_color', '#555555')}"></div>
+          <div class="field"><label>Action Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Action Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
+          <div class="field"><label>Action Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
+        </div>
+      </div>
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
@@ -2215,6 +2240,11 @@ function renderLivePreview() {{
     const linkBg = getVal("link_bg_color_input", "#e8e8ee");
     const linkText = getVal("link_text_color_input", "#111111");
     const linkBorder = getVal("link_border_color_input", "#d8dde6");
+    const headerNameColor = getVal("header_name_color_input", "#111111");
+    const headerTitleColor = getVal("header_title_color_input", "#555555");
+    const actionBg = getVal("action_bg_color_input", "#ffffff");
+    const actionText = getVal("action_text_color_input", "#111111");
+    const actionBorder = getVal("action_border_color_input", "#d8dde6");
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
@@ -2241,10 +2271,10 @@ function renderLivePreview() {{
 #live_buttn_preview .profile-logo {{ width: 126px; height: 126px; margin: 0 auto 18px; border-radius: 50%; background:#fff; display:flex; align-items:center; justify-content:center; border: 4px solid rgba(255,255,255,0.85); box-shadow: 0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
 #live_buttn_preview .profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
 #live_buttn_preview .profile-logo-fallback {{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:800; color:#111; background:#fff; }}
-#live_buttn_preview .profile-name {{ font-size: 25px; font-weight: 800; color:#111; }}
-#live_buttn_preview .profile-title {{ font-size: 15px; color:#555; margin-top: 6px; }}
+#live_buttn_preview .profile-name {{ font-size: 25px; font-weight: 800; color:${{headerNameColor}}; }}
+#live_buttn_preview .profile-title {{ font-size: 15px; color:${{headerTitleColor}}; margin-top: 6px; }}
 #live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
-#live_buttn_preview .action-btn {{ text-decoration:none; color:#111; background:#fff; border:1px solid rgba(0,0,0,0.12); border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+#live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
@@ -2269,7 +2299,9 @@ function renderLivePreview() {{
 [
  "buttn_url_input", "name_input", "title_input", "phone_input", "email_input",
  "header_bg_color_input", "header_image_opacity_input", "page_bg_color_input",
- "link_bg_color_input", "link_text_color_input", "link_border_color_input"
+ "link_bg_color_input", "link_text_color_input", "link_border_color_input",
+ "header_name_color_input", "header_title_color_input", "action_bg_color_input",
+ "action_text_color_input", "action_border_color_input"
 ].forEach(function(id) {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
