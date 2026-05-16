@@ -483,7 +483,13 @@ def create_dome_mockup(qr_img):
     dome_qr = create_dome_only_qr(qr_img, output_size=900)
 
     inset = int(dome_w * 0.10)
-    dome_base = Image.new("RGBA", (dome_w, dome_h), (0, 0, 0, 0))
+
+    # Fill the entire dome base with the selected QR background color first.
+    # This gives the dome mockup extra color bleed around the smaller QR artwork
+    # so gray/transparent gaps do not show near the circular edge.
+    bg_color = qr_img.convert("RGB").getpixel((5, 5))
+    dome_base = Image.new("RGBA", (dome_w, dome_h), (*bg_color, 255))
+
     resized = dome_qr.resize(
         (
             dome_w - (inset * 2),
