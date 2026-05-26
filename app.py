@@ -1845,11 +1845,11 @@ BUTTN_PROFILES = {
         "action_text_color": "#111111",
         "action_border_color": "#d8dde6",
         "links": [
-            {"label": "Button Text", "url": ""},
-            {"label": "", "url": ""},
-            {"label": "", "url": ""},
-            {"label": "", "url": ""},
-            {"label": "", "url": ""},
+            {"icon": "store", "label": "Button Text", "url": ""},
+            {"icon": "youtube", "label": "", "url": ""},
+            {"icon": "instagram", "label": "", "url": ""},
+            {"icon": "facebook", "label": "", "url": ""},
+            {"icon": "pinterest", "label": "", "url": ""},
         ],
     }
 }
@@ -1862,6 +1862,59 @@ def _clean_hex(value, fallback="#ffffff"):
     return rgb_to_hex(parsed)
 
 
+LINK_ICON_OPTIONS = [
+    ("custom", "Custom", "✦"), ("store", "Store", "🛍"), ("website", "Website", "🌐"),
+    ("instagram", "Instagram", "◎"), ("youtube", "YouTube", "▶"), ("tiktok", "TikTok", "♪"),
+    ("facebook", "Facebook", "f"), ("x", "X", "𝕏"), ("pinterest", "Pinterest", "P"),
+    ("threads", "Threads", "@"), ("linkedin", "LinkedIn", "in"), ("reddit", "Reddit", "r"),
+    ("discord", "Discord", "◉"), ("substack", "Substack", "S"), ("etsy", "Etsy", "E"),
+    ("amazon", "Amazon", "a"), ("booking", "Booking", "📅"), ("email", "Email", "✉"),
+    ("phone", "Phone", "☎"), ("cashapp", "Cash App", "$"), ("paypal", "PayPal", "P"),
+    ("venmo", "Venmo", "V"), ("whatsapp", "WhatsApp", "☏"),
+]
+LINK_ICON_MAP = {key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS}
+DEFAULT_LINK_ICON = "custom"
+MAX_PROFILE_LINKS = 15
+
+
+def _normalize_link_icon(value):
+    value = (value or DEFAULT_LINK_ICON).strip().lower()
+    return value if value in LINK_ICON_MAP else DEFAULT_LINK_ICON
+
+
+def _guess_icon_from_label(label):
+    text = (label or "").strip().lower()
+    guesses = [
+        ("instagram", ["instagram", "insta", "ig"]), ("youtube", ["youtube", "you tube", "yt"]),
+        ("tiktok", ["tiktok", "tik tok"]), ("facebook", ["facebook", "fb"]),
+        ("pinterest", ["pinterest"]), ("x", ["twitter", " x", "x "]), ("threads", ["threads"]),
+        ("linkedin", ["linkedin"]), ("reddit", ["reddit"]), ("discord", ["discord"]),
+        ("substack", ["substack", "newsletter"]), ("etsy", ["etsy"]), ("amazon", ["amazon"]),
+        ("store", ["store", "shop", "merch"]), ("website", ["website", "site", "web"]),
+        ("booking", ["booking", "book", "calendar", "appointment", "calendly"]),
+        ("email", ["email"]), ("phone", ["phone", "call"]), ("cashapp", ["cash app", "cashapp"]),
+        ("paypal", ["paypal"]), ("venmo", ["venmo"]), ("whatsapp", ["whatsapp", "what's app"]),
+    ]
+    padded = f" {text} "
+    for icon, terms in guesses:
+        if any(term in padded or term in text for term in terms):
+            return icon
+    return DEFAULT_LINK_ICON
+
+
+def _link_icon_html(icon_key):
+    icon_key = _normalize_link_icon(icon_key)
+    data = LINK_ICON_MAP.get(icon_key, LINK_ICON_MAP[DEFAULT_LINK_ICON])
+    return f'<span class="buttn-link-icon buttn-icon-{html.escape(icon_key)}" aria-label="{html.escape(data["label"])}">{html.escape(data["glyph"])}</span>'
+
+
+def _icon_select_html(name, selected_icon):
+    selected_icon = _normalize_link_icon(selected_icon)
+    options = []
+    for key, label, glyph in LINK_ICON_OPTIONS:
+        selected = " selected" if key == selected_icon else ""
+        options.append(f'<option value="{html.escape(key)}"{selected}>{html.escape(glyph + " " + label)}</option>')
+    return f'<select class="live-link-icon" name="{html.escape(name)}">' + "".join(options) + '</select>'
 
 
 RESERVED_BUTTN_URLS = {
@@ -1981,10 +2034,12 @@ def buttn_public_profile(username):
 
     links_html = ""
     for item in profile.get("links", []):
-        label = html.escape((item.get("label") or "").strip())
+        label_raw = (item.get("label") or "").strip()
+        label = html.escape(label_raw)
         url = html.escape(_safe_url(item.get("url") or ""))
+        icon_key = _normalize_link_icon(item.get("icon") or _guess_icon_from_label(label_raw))
         if label and url:
-            links_html += f'<a class="buttn-link" href="{url}" target="_blank" rel="noopener">{label}</a>'
+            links_html += f'<a class="buttn-link" href="{url}" target="_blank" rel="noopener">{_link_icon_html(icon_key)}<span class="buttn-link-label">{label}</span></a>'
 
     if not links_html:
         links_html = '<div class="empty-note">No links have been added yet.</div>'
@@ -2012,7 +2067,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 .action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 .links-area {{ padding: 24px 20px 34px; }}
-.buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+.buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+.buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}
+.buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
 </style>
@@ -2083,11 +2140,14 @@ def buttn_edit_profile(username):
             profile["header_image_b64"] = image_to_base64(header_img)
 
         links = []
-        for i in range(1, 6):
-            links.append({
-                "label": (request.form.get(f"link{i}_label") or "").strip(),
-                "url": (request.form.get(f"link{i}_url") or "").strip(),
-            })
+        for i in range(1, MAX_PROFILE_LINKS + 1):
+            label_value = (request.form.get(f"link{i}_label") or "").strip()
+            url_value = (request.form.get(f"link{i}_url") or "").strip()
+            icon_value = _normalize_link_icon(request.form.get(f"link{i}_icon") or _guess_icon_from_label(label_value))
+            if label_value or url_value:
+                links.append({"icon": icon_value, "label": label_value, "url": url_value})
+        if not links:
+            links.append({"icon": "custom", "label": "Button Text", "url": ""})
         profile["links"] = links
         BUTTN_PROFILES[requested_url] = profile
         return redirect(f"/buttn/{requested_url}")
@@ -2097,18 +2157,24 @@ def buttn_edit_profile(username):
 
     link_inputs = ""
     existing_links = profile.get("links", [])
-    for i in range(1, 6):
-        item = existing_links[i - 1] if i - 1 < len(existing_links) else {"label": "", "url": ""}
+    visible_count = max(5, min(MAX_PROFILE_LINKS, len(existing_links) if existing_links else 5))
+    for i in range(1, MAX_PROFILE_LINKS + 1):
+        item = existing_links[i - 1] if i - 1 < len(existing_links) else {"icon": "custom", "label": "", "url": ""}
         label_value = item.get("label", "")
         url_value = item.get("url", "")
+        icon_value = _normalize_link_icon(item.get("icon") or _guess_icon_from_label(label_value))
         if i == 1 and not label_value:
             label_value = "Button Text"
+        hidden_class = " hidden-link-row" if i > visible_count else ""
         link_inputs += f'''
-        <div class="link-edit-row">
+        <div class="link-edit-row{hidden_class}" data-link-row="{i}">
+          {_icon_select_html(f"link{i}_icon", icon_value)}
           <input type="text" class="live-link-label" data-link-index="{i}" name="link{i}_label" placeholder="Button text {i}" value="{html.escape(label_value)}">
           <input type="text" class="live-link-url" data-link-index="{i}" name="link{i}_url" placeholder="Link URL {i}" value="{html.escape(url_value)}">
+          <button type="button" class="remove-link-btn" data-remove-link="{i}">×</button>
         </div>
         '''
+
 
 
     return f"""
@@ -2134,12 +2200,16 @@ input[type="text"], input[type="email"], input[type="tel"], input[type="color"],
 input[type="color"] {{ height:46px; padding:4px; }}
 input[type="range"] {{ width:100%; }}
 .color-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }}
-.link-edit-row {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }}
+.link-edit-row {{ display:grid; grid-template-columns:150px 1fr 1fr 44px; gap:10px; margin-bottom:10px; align-items:center; }}
+.link-edit-row.hidden-link-row {{ display:none; }}
+.live-link-icon {{ width:100%; padding:11px; border:1px solid #cfd5df; border-radius:10px; font-size:15px; background:#fff; }}
+.remove-link-btn {{ width:44px; height:44px; border:none; border-radius:10px; background:#f1f1f1; color:#333; font-size:24px; line-height:1; cursor:pointer; margin:0; padding:0; }}
+.add-link-btn {{ width:100%; padding:12px; border:1px dashed #9aa4b2; background:#f8fafc; color:#111; font-size:15px; font-weight:800; border-radius:12px; cursor:pointer; margin-top:6px; }}
 .save-btn {{ width:100%; padding:15px; border:none; background:#111; color:#fff; font-size:17px; font-weight:800; border-radius:14px; cursor:pointer; }}
 .preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
 .preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
-@media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} }}
+@media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} }}
 </style>
 </head>
 <body>
@@ -2167,7 +2237,11 @@ input[type="range"] {{ width:100%; }}
       </div>
       <div class="panel">
         <h2>Links</h2>
-        {link_inputs}
+        <div class="small-help" style="margin-bottom:12px;">Choose an icon, then customize the button text and URL. You can add up to 15 links.</div>
+        <div id="links_editor">
+          {link_inputs}
+        </div>
+        <button type="button" id="add_link_btn" class="add-link-btn">+ Add Link</button>
       </div>
       <div class="panel">
         <h2>Header Text & Actions</h2>
@@ -2199,6 +2273,7 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
+const iconOptions = {json.dumps({key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS})};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 
@@ -2230,22 +2305,23 @@ function readImageFile(input, callback) {{
     reader.readAsDataURL(input.files[0]);
 }}
 function collectLinks() {{
-    const labels = Array.from(document.querySelectorAll(".live-link-label"));
-    const urls = Array.from(document.querySelectorAll(".live-link-url"));
+    const rows = Array.from(document.querySelectorAll(".link-edit-row"));
     let html = "";
-    for (let i = 0; i < labels.length; i++) {{
-        let label = (labels[i].value || "").trim();
-        const url = (urls[i] ? urls[i].value : "").trim();
+    rows.forEach(function(row, index) {{
+        const labelInput = row.querySelector(".live-link-label");
+        const urlInput = row.querySelector(".live-link-url");
+        const iconSelect = row.querySelector(".live-link-icon");
+        let label = labelInput ? (labelInput.value || "").trim() : "";
+        const url = urlInput ? (urlInput.value || "").trim() : "";
+        const iconKey = iconSelect ? (iconSelect.value || "custom") : "custom";
+        const iconData = iconOptions[iconKey] || iconOptions.custom || {{ label: "Custom", glyph: "✦" }};
 
-        if (i === 0 && !label) {{
-            label = "Button Text";
-        }}
-
+        if (index === 0 && !label) {{ label = "Button Text"; }}
         if (label) {{
             const href = url ? safeUrl(url) : "#";
-            html += `<a class="buttn-link" href="${{escapeHtml(href)}}" target="_blank" rel="noopener">${{escapeHtml(label)}}</a>`;
+            html += `<a class="buttn-link" href="${{escapeHtml(href)}}" target="_blank" rel="noopener"><span class="buttn-link-icon buttn-icon-${{escapeHtml(iconKey)}}" aria-label="${{escapeHtml(iconData.label)}}">${{escapeHtml(iconData.glyph)}}</span><span class="buttn-link-label">${{escapeHtml(label)}}</span></a>`;
         }}
-    }}
+    }});
     return html || '<div class="empty-note">No links have been added yet.</div>';
 }}
 function renderLivePreview() {{
@@ -2297,7 +2373,9 @@ function renderLivePreview() {{
 #live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 #live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
-#live_buttn_preview .buttn-link {{ display:block; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+#live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
+#live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}
+#live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
 #live_buttn_preview .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
 </style>
@@ -2327,9 +2405,40 @@ function renderLivePreview() {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
 }});
-document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
-    el.addEventListener("input", renderLivePreview);
-}});
+function wireLinkEditorEvents() {{
+    document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
+        el.addEventListener("input", renderLivePreview);
+    }});
+    document.querySelectorAll(".live-link-icon").forEach(function(el) {{
+        el.addEventListener("change", renderLivePreview);
+    }});
+    document.querySelectorAll(".remove-link-btn").forEach(function(btn) {{
+        btn.addEventListener("click", function() {{
+            const rowNum = btn.getAttribute("data-remove-link");
+            const row = document.querySelector(`[data-link-row="${{rowNum}}"]`);
+            if (!row) return;
+            const label = row.querySelector(".live-link-label");
+            const url = row.querySelector(".live-link-url");
+            const icon = row.querySelector(".live-link-icon");
+            if (label) label.value = "";
+            if (url) url.value = "";
+            if (icon) icon.value = "custom";
+            if (parseInt(rowNum || "1", 10) > 5) row.classList.add("hidden-link-row");
+            renderLivePreview();
+        }});
+    }});
+}}
+wireLinkEditorEvents();
+
+const addLinkBtn = getEl("add_link_btn");
+if (addLinkBtn) {{
+    addLinkBtn.addEventListener("click", function() {{
+        const hiddenRows = Array.from(document.querySelectorAll(".link-edit-row.hidden-link-row"));
+        if (hiddenRows.length) {{ hiddenRows[0].classList.remove("hidden-link-row"); }}
+        if (document.querySelectorAll(".link-edit-row.hidden-link-row").length === 0) {{ addLinkBtn.style.display = "none"; }}
+        renderLivePreview();
+    }});
+}}
 const logoInput = getEl("logo_file_input");
 const headerInput = getEl("header_image_file_input");
 if (logoInput) logoInput.addEventListener("change", function() {{ readImageFile(logoInput, function(data) {{ liveLogoData = data; }}); }});
