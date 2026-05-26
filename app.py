@@ -1862,35 +1862,21 @@ def _clean_hex(value, fallback="#ffffff"):
     return rgb_to_hex(parsed)
 
 
-
 LINK_ICON_OPTIONS = [
-    ("custom", "Custom"),
-    ("store", "Store"),
-    ("website", "Website"),
-    ("instagram", "Instagram"),
-    ("youtube", "YouTube"),
-    ("tiktok", "TikTok"),
-    ("facebook", "Facebook"),
-    ("x", "X"),
-    ("pinterest", "Pinterest"),
-    ("threads", "Threads"),
-    ("linkedin", "LinkedIn"),
-    ("reddit", "Reddit"),
-    ("discord", "Discord"),
-    ("substack", "Substack"),
-    ("etsy", "Etsy"),
-    ("amazon", "Amazon"),
+    ("custom", "Custom", "✦"), ("store", "Store", "🛍"), ("website", "Website", "🌐"),
+    ("instagram", "Instagram"), ("youtube", "YouTube", "▶"), ("tiktok", "TikTok", "♪"),
+    ("facebook", "Facebook", "f"), ("x", "X", "𝕏"), ("pinterest", "Pinterest", "P"),
+    ("threads", "Threads", "@"), ("linkedin", "LinkedIn", "in"), ("reddit", "Reddit", "r"),
+    ("discord", "Discord", "◉"), ("substack", "Substack", "S"), ("etsy", "Etsy", "E"),
+    ("amazon", "Amazon", "a"), ("booking", "Booking", "📅"), ("email", "Email", "✉"),
+    ("phone", "Phone", "☎"), ("cashapp", "Cash App", "$"), ("paypal", "PayPal", "P"),
+    ("venmo", "Venmo", "V"), ("whatsapp", "WhatsApp", "☏"),
 ]
+LINK_ICON_MAP = {key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS}
 
 SVG_ICON_MAP = {
-    "instagram": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>""",
-    "youtube": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 12s0-3.5-.4-5.2c-.2-.9-.9-1.6-1.8-1.8C19.1 4.5 12 4.5 12 4.5s-7.1 0-8.8.5c-.9.2-1.6.9-1.8 1.8C1 8.5 1 12 1 12s0 3.5.4 5.2c.2.9.9 1.6 1.8 1.8 1.7.5 8.8.5 8.8.5s7.1 0 8.8-.5c.9-.2 1.6-.9 1.8-1.8.4-1.7.4-5.2.4-5.2zM10 15.5v-7l6 3.5-6 3.5z"/></svg>""",
-    "facebook": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5H17V4.9c-.3 0-1.3-.1-2.5-.1-2.5 0-4.1 1.5-4.1 4.4V11H8v3h2.4v8h3.1z"/></svg>""",
-    "pinterest": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 3 5.7 3 10.6c0 3.1 1.7 4.9 2.8 4.9.4 0 .7-1.1.7-1.4 0-.4-1-1.2-1-3 0-3.6 2.8-6.1 6.3-6.1 3 0 5.2 1.7 5.2 4.8 0 2.3-.9 6.7-4 6.7-1.1 0-2-1-1.7-2.1.3-1.4.9-2.9.9-4.4 0-2.6-3.7-2.1-3.7 1 0 .6.1 1.3.4 1.8-.6 2.5-1.8 6.2-1.8 8.8.9.3 1.2-.9 1.5-1.6.5-1.3 1-2.7 1.3-4 .7 1.3 2.5 2 3.9 2 5 0 7.2-4.8 7.2-9.2C21 5.8 17.2 2 12 2z"/></svg>""",
-    "amazon": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 18.5c-1.9 1.4-4.7 2.1-7.1 2.1-3.3 0-6.2-1.2-8.5-3.2-.2-.2 0-.5.2-.4 2.5 1.4 5.5 2.2 8.7 2.2 2.1 0 4.4-.4 6.5-1.3.3-.1.5.2.2.6zm1-1.1c-.2-.2-1.2-.1-1.7-.1-.2 0-.3-.2-.1-.4 1.1-.8 2.9-.6 3.1-.3.2.3-.1 2.1-1.1 3-.2.1-.4.1-.3-.1.3-.7 1-2 .8-2.2zM16.7 13v-.8c0-.1-.1-.2-.2-.2h-3.7c-.1 0-.2.1-.2.2v1.1c0 .1.1.2.2.2h2.1v.4c0 .8-.6 1.5-1.5 1.5-.9 0-1.6-.7-1.6-2V9.8c0-1.2.7-2 1.6-2 .6 0 1.1.4 1.3 1 .1.1.1.2.2.2l1.7-.1c.1 0 .2-.1.2-.2-.2-2-1.6-3.1-3.4-3.1-2.2 0-3.8 1.5-3.8 4.2v3.5c0 2.5 1.5 4 3.7 4 1.1 0 2-.4 2.8-1.3.5-.6.7-1.3.7-2.3z"/></svg>""",
+    "instagram": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>"""
 }
-
-LINK_ICON_MAP = {key: {"label": label} for key, label in LINK_ICON_OPTIONS}
 
 DEFAULT_LINK_ICON = "custom"
 MAX_PROFILE_LINKS = 15
@@ -1921,22 +1907,23 @@ def _guess_icon_from_label(label):
     return DEFAULT_LINK_ICON
 
 
-
 def _link_icon_html(icon_key):
     icon_key = _normalize_link_icon(icon_key)
     data = LINK_ICON_MAP.get(icon_key, LINK_ICON_MAP[DEFAULT_LINK_ICON])
     svg = SVG_ICON_MAP.get(icon_key)
+
     if svg:
         return f'<span class="buttn-link-icon buttn-icon-{html.escape(icon_key)}" aria-label="{html.escape(data["label"])}">{svg}</span>'
-    return f'<span class="buttn-link-icon buttn-icon-{html.escape(icon_key)}">✦</span>'
+
+    return '<span class="buttn-link-icon buttn-icon-custom">✦</span>'
 
 
 def _icon_select_html(name, selected_icon):
     selected_icon = _normalize_link_icon(selected_icon)
     options = []
-    for key, label in LINK_ICON_OPTIONS:
+    for key, label, glyph in LINK_ICON_OPTIONS:
         selected = " selected" if key == selected_icon else ""
-        options.append(f'<option value="{html.escape(key)}"{selected}>{html.escape(label)}</option>')
+        options.append(f'<option value="{html.escape(key)}"{selected}>{html.escape(glyph + " " + label)}</option>')
     return f'<select class="live-link-icon" name="{html.escape(name)}">' + "".join(options) + '</select>'
 
 
@@ -2296,7 +2283,7 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
-const iconOptions = {};
+const iconOptions = {json.dumps({key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS})};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 
@@ -2337,10 +2324,7 @@ function collectLinks() {{
         let label = labelInput ? (labelInput.value || "").trim() : "";
         const url = urlInput ? (urlInput.value || "").trim() : "";
         const iconKey = iconSelect ? (iconSelect.value || "custom") : "custom";
-        const svgMap = {
-        instagram:`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>`
-    };
-    const svgIcon = svgMap[iconKey] || "✦";
+        const iconData = iconOptions[iconKey] || iconOptions.custom || {{ label: "Custom", glyph: "✦" }};
 
         if (index === 0 && !label) {{ label = "Button Text"; }}
         if (label) {{
