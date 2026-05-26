@@ -1009,6 +1009,7 @@ button {{
 
     <div class="label">QR Type</div>
     <input type="hidden" name="qr_style" id="qr_style" value="{safe_qr_style}">
+    <input type="hidden" name="last_rendered_qr_style" id="last_rendered_qr_style" value="{safe_qr_style}">
     <div class="qr-type-options">
         <button type="button" id="simple_qr_card" class="qr-type-card {simple_selected}" onclick="selectQRStyle('simple')">
             <div class="qr-type-title">Simple QR</div>
@@ -1155,11 +1156,20 @@ button {{
 <script>
 function selectQRStyle(style) {{
     const qrStyleInput = document.getElementById("qr_style");
+    const lastRenderedStyleInput = document.getElementById("last_rendered_qr_style");
     const simpleCard = document.getElementById("simple_qr_card");
     const brandedCard = document.getElementById("branded_qr_card");
+    const styleChanged = qrStyleInput && qrStyleInput.value !== style;
 
     if (qrStyleInput) {{
         qrStyleInput.value = style;
+    }}
+
+    if (styleChanged) {{
+        const bgInput = document.getElementById("bg_override");
+        if (bgInput) {{
+            bgInput.value = "";
+        }}
     }}
 
     if (simpleCard) {{
@@ -1760,12 +1770,23 @@ def home():
         bg_override_value = (request.form.get("bg_override") or "").strip()
         art_data_b64 = (request.form.get("art_data") or "").strip()
         qr_style = (request.form.get("qr_style") or "artistic").strip().lower()
+        last_rendered_qr_style = (request.form.get("last_rendered_qr_style") or qr_style).strip().lower()
+
+        # Issue #1 fix:
+        # If the customer switches QR modes without refreshing the page, do not let
+        # the previous mode's manual/current background state contaminate the new render.
+        # This allows Simple -> Branded -> Simple -> Branded to regenerate cleanly each time.
+        if last_rendered_qr_style != qr_style:
+            bg_override_value = ""
 
         art_file = request.files.get("artfile")
         art = fetch_uploaded_image(art_file)
 
         if art is None and art_data_b64:
             art = fetch_image_from_hidden_b64(art_data_b64)
+
+        if qr_style not in ("simple", "artistic"):
+            qr_style = "artistic"
 
         if data_value:
             if qr_style == "simple":
