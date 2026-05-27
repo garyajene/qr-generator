@@ -2298,31 +2298,7 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
-const iconOptions = {
-    instagram: {label:"Instagram", svg:`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>`},
-    custom: {label:"Custom", svg:"✦"},
-    store: {label:"Store", svg:"✦"},
-    website: {label:"Website", svg:"✦"},
-    youtube: {label:"YouTube", svg:"✦"},
-    tiktok: {label:"TikTok", svg:"✦"},
-    facebook: {label:"Facebook", svg:"✦"},
-    x: {label:"X", svg:"✦"},
-    pinterest: {label:"Pinterest", svg:"✦"},
-    threads: {label:"Threads", svg:"✦"},
-    linkedin: {label:"LinkedIn", svg:"✦"},
-    reddit: {label:"Reddit", svg:"✦"},
-    discord: {label:"Discord", svg:"✦"},
-    substack: {label:"Substack", svg:"✦"},
-    etsy: {label:"Etsy", svg:"✦"},
-    amazon: {label:"Amazon", svg:"✦"},
-    booking: {label:"Booking", svg:"✦"},
-    email: {label:"Email", svg:"✦"},
-    phone: {label:"Phone", svg:"✦"},
-    cashapp: {label:"Cash App", svg:"✦"},
-    paypal: {label:"PayPal", svg:"✦"},
-    venmo: {label:"Venmo", svg:"✦"},
-    whatsapp: {label:"WhatsApp", svg:"✦"}
-};
+const iconOptions = {json.dumps({key: {"label": data["label"], "svg": SVG_ICON_MAP.get(key, "✦")} for key, data in LINK_ICON_MAP.items()})};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 
