@@ -1891,7 +1891,7 @@ LINK_ICON_OPTIONS = [
 LINK_ICON_MAP = {key: {"label": label} for key, label in LINK_ICON_OPTIONS}
 
 SVG_ICON_MAP = {
-    "instagram": """<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>""",
+    "instagram": '<svg class="buttn-svg-icon" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60.98 60.98"><defs><style>.cls-1{fill:#010101;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M46.64,10.89a3.58,3.58,0,1,0,3.57,3.57A3.57,3.57,0,0,0,46.64,10.89Z"/><path class="cls-1" d="M30.74,15.47a15,15,0,1,0,15,15A15,15,0,0,0,30.74,15.47Zm0,24.64a9.62,9.62,0,1,1,9.62-9.62A9.63,9.63,0,0,1,30.74,40.11Z"/><path class="cls-1" d="M42.66,61H18.32A18.33,18.33,0,0,1,0,42.67V18.32A18.34,18.34,0,0,1,18.32,0H42.66A18.34,18.34,0,0,1,61,18.32V42.67A18.33,18.33,0,0,1,42.66,61ZM18.32,5.74A12.59,12.59,0,0,0,5.74,18.32V42.67A12.6,12.6,0,0,0,18.32,55.25H42.66A12.6,12.6,0,0,0,55.25,42.67V18.32A12.6,12.6,0,0,0,42.66,5.74Z"/></g></g></svg>',
 }
 
 DEFAULT_LINK_ICON = "custom"
@@ -2298,7 +2298,31 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
-const iconOptions = {json.dumps({key: {"label": data["label"], "svg": SVG_ICON_MAP.get(key, "✦")} for key, data in LINK_ICON_MAP.items()})};
+const iconOptions = {
+    instagram: {label:"Instagram", svg:`<svg class="buttn-svg-icon" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60.98 60.98"><defs><style>.cls-1{fill:#010101;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M46.64,10.89a3.58,3.58,0,1,0,3.57,3.57A3.57,3.57,0,0,0,46.64,10.89Z"/><path class="cls-1" d="M30.74,15.47a15,15,0,1,0,15,15A15,15,0,0,0,30.74,15.47Zm0,24.64a9.62,9.62,0,1,1,9.62-9.62A9.63,9.63,0,0,1,30.74,40.11Z"/><path class="cls-1" d="M42.66,61H18.32A18.33,18.33,0,0,1,0,42.67V18.32A18.34,18.34,0,0,1,18.32,0H42.66A18.34,18.34,0,0,1,61,18.32V42.67A18.33,18.33,0,0,1,42.66,61ZM18.32,5.74A12.59,12.59,0,0,0,5.74,18.32V42.67A12.6,12.6,0,0,0,18.32,55.25H42.66A12.6,12.6,0,0,0,55.25,42.67V18.32A12.6,12.6,0,0,0,42.66,5.74Z"/></g></g></svg>`},
+    custom: {label:"Custom", svg:"✦"},
+    store: {label:"Store", svg:"✦"},
+    website: {label:"Website", svg:"✦"},
+    youtube: {label:"YouTube", svg:"✦"},
+    tiktok: {label:"TikTok", svg:"✦"},
+    facebook: {label:"Facebook", svg:"✦"},
+    x: {label:"X", svg:"✦"},
+    pinterest: {label:"Pinterest", svg:"✦"},
+    threads: {label:"Threads", svg:"✦"},
+    linkedin: {label:"LinkedIn", svg:"✦"},
+    reddit: {label:"Reddit", svg:"✦"},
+    discord: {label:"Discord", svg:"✦"},
+    substack: {label:"Substack", svg:"✦"},
+    etsy: {label:"Etsy", svg:"✦"},
+    amazon: {label:"Amazon", svg:"✦"},
+    booking: {label:"Booking", svg:"✦"},
+    email: {label:"Email", svg:"✦"},
+    phone: {label:"Phone", svg:"✦"},
+    cashapp: {label:"Cash App", svg:"✦"},
+    paypal: {label:"PayPal", svg:"✦"},
+    venmo: {label:"Venmo", svg:"✦"},
+    whatsapp: {label:"WhatsApp", svg:"✦"}
+};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 
