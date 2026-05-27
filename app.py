@@ -1931,6 +1931,15 @@ SVG_ICON_MAP = {
 </svg>"""
 }
 
+
+# Normalize SVG icon keys so mismatched capitalization/spaces
+# never break icon rendering.
+SVG_ICON_MAP = {
+    str(key).strip().lower(): value
+    for key, value in SVG_ICON_MAP.items()
+}
+
+
 DEFAULT_LINK_ICON = "custom"
 MAX_PROFILE_LINKS = 15
 
