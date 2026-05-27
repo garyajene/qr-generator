@@ -2092,7 +2092,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 .links-area {{ padding: 24px 20px 34px; }}
 .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
-.buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}
+.buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}\n.buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 .buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
@@ -2339,7 +2339,7 @@ function collectLinks() {{
         let label = labelInput ? (labelInput.value || "").trim() : "";
         const url = urlInput ? (urlInput.value || "").trim() : "";
         const iconKey = iconSelect ? (iconSelect.value || "custom") : "custom";
-        const iconData = iconOptions[iconKey] || iconOptions.custom || { label: "Custom", svg: "✦" };
+        const iconData = iconOptions[iconKey] || iconOptions.custom || {{ label: "Custom", svg: "✦" }};
 
         if (index === 0 && !label) {{ label = "Button Text"; }}
         if (label) {{
@@ -2399,7 +2399,7 @@ function renderLivePreview() {{
 #live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
-#live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}
+#live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}\n#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 #live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 #live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
