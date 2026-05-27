@@ -1863,19 +1863,35 @@ def _clean_hex(value, fallback="#ffffff"):
 
 
 LINK_ICON_OPTIONS = [
-    ("custom", "Custom", "✦"), ("store", "Store", "🛍"), ("website", "Website", "🌐"),
-    ("instagram", "Instagram"), ("youtube", "YouTube", "▶"), ("tiktok", "TikTok", "♪"),
-    ("facebook", "Facebook", "f"), ("x", "X", "𝕏"), ("pinterest", "Pinterest", "P"),
-    ("threads", "Threads", "@"), ("linkedin", "LinkedIn", "in"), ("reddit", "Reddit", "r"),
-    ("discord", "Discord", "◉"), ("substack", "Substack", "S"), ("etsy", "Etsy", "E"),
-    ("amazon", "Amazon", "a"), ("booking", "Booking", "📅"), ("email", "Email", "✉"),
-    ("phone", "Phone", "☎"), ("cashapp", "Cash App", "$"), ("paypal", "PayPal", "P"),
-    ("venmo", "Venmo", "V"), ("whatsapp", "WhatsApp", "☏"),
+    ("custom", "Custom"),
+    ("store", "Store"),
+    ("website", "Website"),
+    ("instagram", "Instagram"),
+    ("youtube", "YouTube"),
+    ("tiktok", "TikTok"),
+    ("facebook", "Facebook"),
+    ("x", "X"),
+    ("pinterest", "Pinterest"),
+    ("threads", "Threads"),
+    ("linkedin", "LinkedIn"),
+    ("reddit", "Reddit"),
+    ("discord", "Discord"),
+    ("substack", "Substack"),
+    ("etsy", "Etsy"),
+    ("amazon", "Amazon"),
+    ("booking", "Booking"),
+    ("email", "Email"),
+    ("phone", "Phone"),
+    ("cashapp", "Cash App"),
+    ("paypal", "PayPal"),
+    ("venmo", "Venmo"),
+    ("whatsapp", "WhatsApp"),
 ]
-LINK_ICON_MAP = {key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS}
+
+LINK_ICON_MAP = {key: {"label": label} for key, label in LINK_ICON_OPTIONS}
 
 SVG_ICON_MAP = {
-    "instagram": """<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>"""
+    "instagram": """<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>""",
 }
 
 DEFAULT_LINK_ICON = "custom"
@@ -1911,19 +1927,17 @@ def _link_icon_html(icon_key):
     icon_key = _normalize_link_icon(icon_key)
     data = LINK_ICON_MAP.get(icon_key, LINK_ICON_MAP[DEFAULT_LINK_ICON])
     svg = SVG_ICON_MAP.get(icon_key)
-
     if svg:
         return f'<span class="buttn-link-icon buttn-icon-{html.escape(icon_key)}" aria-label="{html.escape(data["label"])}">{svg}</span>'
-
-    return '<span class="buttn-link-icon buttn-icon-custom">✦</span>'
+    return f'<span class="buttn-link-icon buttn-icon-{html.escape(icon_key)}" aria-label="{html.escape(data["label"])}">✦</span>'
 
 
 def _icon_select_html(name, selected_icon):
     selected_icon = _normalize_link_icon(selected_icon)
     options = []
-    for key, label, glyph in LINK_ICON_OPTIONS:
+    for key, label in LINK_ICON_OPTIONS:
         selected = " selected" if key == selected_icon else ""
-        options.append(f'<option value="{html.escape(key)}"{selected}>{html.escape(glyph + " " + label)}</option>')
+        options.append(f'<option value="{html.escape(key)}"{selected}>{html.escape(label)}</option>')
     return f'<select class="live-link-icon" name="{html.escape(name)}">' + "".join(options) + '</select>'
 
 
@@ -2079,6 +2093,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .links-area {{ padding: 24px 20px 34px; }}
 .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}
+.buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
@@ -2283,7 +2298,31 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
-const iconOptions = {json.dumps({key: {"label": label, "glyph": glyph} for key, label, glyph in LINK_ICON_OPTIONS})};
+const iconOptions = {
+    instagram: {label:"Instagram", svg:`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2C4.2 2 2 4.2 2 7v10c0 2.8 2.2 5 5 5h10c2.8 0 5-2.2 5-5V7c0-2.8-2.2-5-5-5H7zm0 2h10c1.7 0 3 1.3 3 3v10c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3V7c0-1.7 1.3-3 3-3zm11.5 1a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>`},
+    custom: {label:"Custom", svg:"✦"},
+    store: {label:"Store", svg:"✦"},
+    website: {label:"Website", svg:"✦"},
+    youtube: {label:"YouTube", svg:"✦"},
+    tiktok: {label:"TikTok", svg:"✦"},
+    facebook: {label:"Facebook", svg:"✦"},
+    x: {label:"X", svg:"✦"},
+    pinterest: {label:"Pinterest", svg:"✦"},
+    threads: {label:"Threads", svg:"✦"},
+    linkedin: {label:"LinkedIn", svg:"✦"},
+    reddit: {label:"Reddit", svg:"✦"},
+    discord: {label:"Discord", svg:"✦"},
+    substack: {label:"Substack", svg:"✦"},
+    etsy: {label:"Etsy", svg:"✦"},
+    amazon: {label:"Amazon", svg:"✦"},
+    booking: {label:"Booking", svg:"✦"},
+    email: {label:"Email", svg:"✦"},
+    phone: {label:"Phone", svg:"✦"},
+    cashapp: {label:"Cash App", svg:"✦"},
+    paypal: {label:"PayPal", svg:"✦"},
+    venmo: {label:"Venmo", svg:"✦"},
+    whatsapp: {label:"WhatsApp", svg:"✦"}
+};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 
@@ -2324,12 +2363,12 @@ function collectLinks() {{
         let label = labelInput ? (labelInput.value || "").trim() : "";
         const url = urlInput ? (urlInput.value || "").trim() : "";
         const iconKey = iconSelect ? (iconSelect.value || "custom") : "custom";
-        const iconData = iconOptions[iconKey] || iconOptions.custom || {{ label: "Custom", glyph: "✦" }};
+        const iconData = iconOptions[iconKey] || iconOptions.custom || { label: "Custom", svg: "✦" };
 
         if (index === 0 && !label) {{ label = "Button Text"; }}
         if (label) {{
             const href = url ? safeUrl(url) : "#";
-            html += `<a class="buttn-link" href="${{escapeHtml(href)}}" target="_blank" rel="noopener"><span class="buttn-link-icon buttn-icon-${{escapeHtml(iconKey)}}" aria-label="${{escapeHtml(iconData.label)}}">${{escapeHtml(iconData.glyph)}}</span><span class="buttn-link-label">${{escapeHtml(label)}}</span></a>`;
+            html += `<a class="buttn-link" href="${{escapeHtml(href)}}" target="_blank" rel="noopener"><span class="buttn-link-icon buttn-icon-${{escapeHtml(iconKey)}}" aria-label="${{escapeHtml(iconData.label)}}">${{iconData.svg || "✦"}}</span><span class="buttn-link-label">${{escapeHtml(label)}}</span></a>`;
         }}
     }});
     return html || '<div class="empty-note">No links have been added yet.</div>';
@@ -2385,6 +2424,7 @@ function renderLivePreview() {{
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 #live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}
+#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; }}
 #live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
 #live_buttn_preview .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
