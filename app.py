@@ -1886,6 +1886,8 @@ LINK_ICON_OPTIONS = [
     ("cashapp", "Cash App"),
     ("paypal", "PayPal"),
     ("venmo", "Venmo"),
+    ("schedule", "Schedule"),
+    ("twitch", "Twitch"),
     ("whatsapp", "WhatsApp"),
 ]
 
@@ -1917,6 +1919,16 @@ SVG_ICON_MAP = {
         </g>
     </g></svg>""",
     "venmo": r"""<svg class="buttn-svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" d="M40.25,4.45a14.26,14.26,0,0,1,2.06,7.8c0,9.72-8.3,22.34-15,31.2H11.91L5.74,6.58,19.21,5.3l3.27,26.24c3.05-5,6.81-12.76,6.81-18.08A14.51,14.51,0,0,0,28,6.94Z"/></svg>""",
+    "schedule": r"""<?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 9H21M7 3V5M17 3V5M6 12H8M11 12H13M16 12H18M6 15H8M11 15H13M16 15H18M6 18H8M11 18H13M16 18H18M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+</svg>""",
+    "twitch": r"""<?xml version="1.0" encoding="utf-8"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg fill="#000000" width="800px" height="800px" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">
+<title>twitch</title>
+<path d="M26.711 14.929l-4.284 4.284h-4.285l-3.749 3.749v-3.749h-4.82v-16.067h17.138zM8.502 1.004l-5.356 5.356v19.279h6.427v5.356l5.356-5.356h4.284l9.641-9.64v-14.996zM21.356 6.895h2.142v6.427h-2.142zM15.464 6.895h2.143v6.427h-2.144z"></path>
+</svg>""",
     "discord": r"""<svg class="buttn-svg-icon" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 71.45 54.44"><defs><style>.cls-1{fill:#010101;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M60.52,4.55A58.57,58.57,0,0,0,45.78,0a36.63,36.63,0,0,0-1.89,3.88,55.17,55.17,0,0,0-16.33,0A42.53,42.53,0,0,0,25.62,0,58.16,58.16,0,0,0,10.87,4.57C1.57,18.44-1,32,.3,45.31a59.4,59.4,0,0,0,18.09,9.13,44.62,44.62,0,0,0,3.87-6.29,38.74,38.74,0,0,1-6.1-2.91c.51-.39,1-.77,1.48-1.16a42.26,42.26,0,0,0,36.17,0c.48.4,1,.79,1.49,1.16a37.67,37.67,0,0,1-6.11,2.93,43.85,43.85,0,0,0,3.87,6.27,58.93,58.93,0,0,0,18.09-9.12A60.23,60.23,0,0,0,60.52,4.55ZM23.85,37.12c-3.53,0-6.42-3.23-6.42-7.2s2.83-7.22,6.42-7.22,6.46,3.23,6.43,7.2S27.44,37.12,23.85,37.12Zm23.74,0c-3.53,0-6.42-3.23-6.42-7.2S44,22.7,47.59,22.7s6.46,3.23,6.42,7.2S51.18,37.12,47.59,37.12Z"/></g></g></svg>""",
     "facebook": r"""<svg class="buttn-svg-icon" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.05 65.45"><defs><style>.cls-1{fill:#010101;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M23.21,65.45V36.82h9.55L34.57,25H23.21V17.28c0-3.24,1.59-6.4,6.68-6.4h5.16V.8A63,63,0,0,0,25.88,0C16.52,0,10.4,5.67,10.4,15.94v9H0V36.82H10.4V65.45Z"/></g></g></svg>""",
     "linkedin": r"""<svg class="buttn-svg-icon" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60.63 60.49"><defs><style>.cls-1{fill:#010101;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M1,20.08H13.58V60.49H1ZM7.29,0A7.28,7.28,0,1,1,0,7.28,7.28,7.28,0,0,1,7.29,0"/><path class="cls-1" d="M21.46,20.08h12v5.53h.16c1.68-3.18,5.78-6.53,11.9-6.53,12.71,0,15.06,8.36,15.06,19.24V60.49H48.08V40.84c0-4.69-.1-10.71-6.53-10.71S34,35.23,34,40.5v20H21.46Z"/></g></g></svg>""",
