@@ -1939,8 +1939,8 @@ def _dashboard_page(message=""):
         title = html.escape(row.get("title") or "")
         profile_rows += f'''
         <div class="profile-row">
-            <div><strong>{name}</strong><br><span>/buttn/{username}</span><br><small>{title}</small></div>
-            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/buttn/{username}" target="_blank">View</a></div>
+            <div><strong>{name}</strong><br><span>/{username}</span><br><small>{title}</small></div>
+            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/{username}" target="_blank">View</a></div>
         </div>
         '''
 
@@ -2141,7 +2141,7 @@ def account_create_profile():
     profile = BUTTN_PROFILES["test"].copy()
     profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
     profile["buttn_url"] = username
-    profile["name"] = ""
+    profile["name"] = _display_name_from_username(username)
     profile["title"] = ""
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
@@ -2432,6 +2432,13 @@ def _normalize_buttn_url(value):
     return cleaned.strip("-")
 
 
+def _display_name_from_username(username):
+    username = _normalize_buttn_url(username)
+    if not username:
+        return ""
+    return " ".join(part.capitalize() for part in username.split("-") if part)
+
+
 def _is_buttn_url_taken(url_value, current_username=None):
     normalized = _normalize_buttn_url(url_value)
     current_username = _normalize_buttn_url(current_username or "")
@@ -2606,6 +2613,16 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 """
 
 
+@app.route("/<username>")
+def buttn_public_profile_root(username):
+    username = _normalize_buttn_url(username)
+    if (not username) or username in RESERVED_BUTTN_URLS:
+        return redirect("/generate")
+    if not (_db_profile_exists(username) or username in BUTTN_PROFILES):
+        return redirect("/generate")
+    return buttn_public_profile(username)
+
+
 @app.route("/buttn/test")
 def buttn_test_alias():
     return buttn_public_profile("test")
@@ -2681,7 +2698,7 @@ def buttn_edit_profile(username):
         else:
             BUTTN_PROFILES[requested_url] = profile
 
-        return redirect(f"/buttn/{requested_url}")
+        return redirect(f"/{requested_url}")
 
     def val(key, fallback=""):
         return html.escape(str(profile.get(key, fallback) or ""))
@@ -2753,7 +2770,7 @@ input[type="range"] {{ width:100%; }}
     <form method="post" enctype="multipart/form-data">
       <div class="panel">
         <h2>Profile Identity</h2>
-        <div class="field"><label>BUTTN URL</label><input id="buttn_url_input" type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /buttn/tshirt-help-desk</div></div>
+        <div class="field"><label>BUTTN URL</label><input id="buttn_url_input" type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /tshirt-help-desk</div></div>
         <div class="field"><label>Name / Brand</label><input id="name_input" type="text" name="name" value="{val('name')}"></div>
         <div class="field"><label>Title / Company</label><input id="title_input" type="text" name="title" value="{val('title')}"></div>
         <div class="field"><label>Phone</label><input id="phone_input" type="tel" name="phone" value="{val('phone')}"></div>
@@ -2796,7 +2813,7 @@ input[type="range"] {{ width:100%; }}
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
-      <div class="preview-note">Live Preview (updates instantly) — Current public page: <strong>/buttn/{html.escape(username)}</strong></div>
+      <div class="preview-note">Live Preview (updates instantly) — Current public page: <strong>/{html.escape(username)}</strong></div>
       <div id="live_buttn_preview" style="width:100%; min-height:680px; background:#ffffff;"></div>
     </div>
   </div>
@@ -2859,7 +2876,8 @@ function renderLivePreview() {{
     const root = getEl("live_buttn_preview");
     if (!root) return;
 
-    const name = getVal("name_input", "Your Name");
+    const defaultDisplayName = {json.dumps(_display_name_from_username(username) or "Your Name")};
+    const name = getVal("name_input", defaultDisplayName);
     const title = getVal("title_input", "Title / Company");
     const phone = getVal("phone_input", "");
     const email = getVal("email_input", "");
