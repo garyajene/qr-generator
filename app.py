@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, session
+from flask import Flask, request, redirect, session, Response
 from io import BytesIO
 import base64
 import random
@@ -2489,6 +2489,51 @@ def _profile_logo_html(profile):
     return f'<div class="profile-logo-fallback">{initial}</div>'
 
 
+def _vcard_escape(value):
+    value = str(value or "")
+    value = value.replace("\\", "\\\\")
+    value = value.replace("\n", "\\n").replace("\r", "")
+    value = value.replace(";", "\\;").replace(",", "\\,")
+    return value
+
+
+@app.route("/buttn/contact/<username>")
+def buttn_download_contact(username):
+    username = _normalize_buttn_url(username or "test") or "test"
+    profile = _get_profile(username)
+
+    name = (profile.get("name") or _display_name_from_username(username) or username).strip()
+    title = (profile.get("title") or "").strip()
+    phone = (profile.get("phone") or "").strip()
+    email_addr = (profile.get("email") or "").strip()
+    profile_url = f"https://mybuttn.com/{username}"
+
+    lines = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        f"FN:{_vcard_escape(name)}",
+    ]
+
+    if title:
+        lines.append(f"ORG:{_vcard_escape(title)}")
+    if phone:
+        lines.append(f"TEL;TYPE=CELL:{_vcard_escape(phone)}")
+    if email_addr:
+        lines.append(f"EMAIL;TYPE=INTERNET:{_vcard_escape(email_addr)}")
+
+    lines.append(f"URL:{_vcard_escape(profile_url)}")
+    lines.append("END:VCARD")
+
+    vcard = "\r\n".join(lines) + "\r\n"
+    filename = f"{username}.vcf"
+
+    return Response(
+        vcard,
+        mimetype="text/vcard; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @app.route("/buttn/start/<username>", methods=["POST"])
 def buttn_start_from_qr(username):
     username = (username or "test").strip().lower().replace(" ", "-") or "test"
@@ -2549,7 +2594,7 @@ def buttn_public_profile(username):
         action_buttons += f'<a class="action-btn" href="tel:{safe_phone}">Call</a>'
     if safe_email:
         action_buttons += f'<a class="action-btn" href="mailto:{safe_email}">Email</a>'
-    action_buttons += '<a class="action-btn" href="#">Save</a>'
+    action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Save Contact</a>'
 
     links_html = ""
     for item in profile.get("links", []):
@@ -2792,13 +2837,13 @@ input[type="range"] {{ width:100%; }}
         <button type="button" id="add_link_btn" class="add-link-btn">+ Add Link</button>
       </div>
       <div class="panel">
-        <h2>Header Text & Actions</h2>
+        <h2>Header Text & Save Contact</h2>
         <div class="color-grid">
           <div class="field"><label>Name Text</label><input id="header_name_color_input" type="color" name="header_name_color" value="{val('header_name_color', '#111111')}"></div>
           <div class="field"><label>Title Text</label><input id="header_title_color_input" type="color" name="header_title_color" value="{val('header_title_color', '#555555')}"></div>
-          <div class="field"><label>Action Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
-          <div class="field"><label>Action Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
-          <div class="field"><label>Action Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
+          <div class="field"><label>Save Contact Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Save Contact Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
+          <div class="field"><label>Save Contact Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
         </div>
       </div>
       <div class="panel">
@@ -2919,7 +2964,7 @@ function renderLivePreview() {{
     let actions = "";
     if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
     if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
-    actions += '<a class="action-btn" href="#">Save</a>';
+    actions += '<a class="action-btn" href="#">Save Contact</a>';
 
     root.innerHTML = `
 <style>
