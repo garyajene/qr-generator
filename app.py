@@ -7,9 +7,101 @@ from PIL import Image, ImageDraw, ImageStat
 import segno
 import html
 import json
+import os
+from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
+
+# -----------------------------
+# DATABASE FOUNDATION - SAFE ADD-ON
+# PostgreSQL lives in Railway. SQLAlchemy lets this Flask app talk to it.
+# This block does not replace the existing BUTTN demo dictionary yet.
+# It only creates the first real database tables so we can move toward
+# accounts, usernames, profile ownership, and Free/Pro plans safely.
+# -----------------------------
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+# Railway/Postgres URLs may sometimes use postgres://, while SQLAlchemy expects
+# postgresql:// with newer drivers.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True) if DATABASE_URL else None
+_db_initialized = False
+
+
+def init_database():
+    """Create the first real BUTTN database tables if they do not exist."""
+    global _db_initialized
+
+    if _db_initialized or engine is None:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                account_type TEXT NOT NULL DEFAULT 'free',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS profiles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT UNIQUE NOT NULL,
+                name TEXT DEFAULT '',
+                title TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                logo_b64 TEXT DEFAULT '',
+                header_image_b64 TEXT DEFAULT '',
+                header_bg_color TEXT DEFAULT '#9d5d4d',
+                header_image_opacity TEXT DEFAULT '35',
+                page_bg_color TEXT DEFAULT '#f5f5f5',
+                link_bg_color TEXT DEFAULT '#e8e8ee',
+                link_text_color TEXT DEFAULT '#111111',
+                link_border_color TEXT DEFAULT '#d8dde6',
+                header_name_color TEXT DEFAULT '#111111',
+                header_title_color TEXT DEFAULT '#555555',
+                action_bg_color TEXT DEFAULT '#ffffff',
+                action_text_color TEXT DEFAULT '#111111',
+                action_border_color TEXT DEFAULT '#d8dde6',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS profile_links (
+                id SERIAL PRIMARY KEY,
+                profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                icon TEXT DEFAULT 'custom',
+                label TEXT DEFAULT '',
+                url TEXT DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+    _db_initialized = True
+
+
+@app.before_request
+def ensure_database_ready():
+    # Keep this safe: if DATABASE_URL has not been attached to the web service yet,
+    # the current app still runs normally.
+    try:
+        init_database()
+    except Exception:
+        pass
+
 
 ERROR_LEVEL = "h"
 BOX = 16
@@ -1752,6 +1844,22 @@ if (currentBgLabel) {{
 </body>
 </html>
 """
+
+
+@app.route("/db-status")
+def db_status():
+    if engine is None:
+        return "Database not connected. DATABASE_URL is missing from this web service.", 500
+
+    try:
+        init_database()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return "Database connected. BUTTN tables are ready."
+    except Exception as exc:
+        safe_error = html.escape(str(exc))
+        return f"Database connection error: {safe_error}", 500
+
 
 
 @app.route("/generate", methods=["GET", "POST"])
