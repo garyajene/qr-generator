@@ -2599,11 +2599,19 @@ def buttn_public_profile(username):
     links_html = ""
     for item in profile.get("links", []):
         label_raw = (item.get("label") or "").strip()
+        url_raw = (item.get("url") or "").strip()
         label = html.escape(label_raw)
-        url = html.escape(_safe_url(item.get("url") or ""))
+        url = html.escape(_safe_url(url_raw)) if url_raw else "#"
         icon_key = _normalize_link_icon(item.get("icon") or _guess_icon_from_label(label_raw))
-        if label and url:
-            links_html += f'<a class="buttn-link" href="{url}" target="_blank" rel="noopener">{_link_icon_html(icon_key)}<span class="buttn-link-label">{label}</span></a>'
+
+        # IMPORTANT BUG FIX:
+        # The live editor preview already shows a button when the label exists,
+        # even if the URL is blank. The saved/public page must behave the same way.
+        # Before this, the public page required BOTH label and URL, so blank-URL
+        # buttons disappeared after Save & Preview.
+        if label:
+            target_attr = ' target="_blank" rel="noopener"' if url != "#" else ""
+            links_html += f'<a class="buttn-link" href="{url}"{target_attr}>{_link_icon_html(icon_key)}<span class="buttn-link-label">{label}</span></a>'
 
     if not links_html:
         links_html = '<div class="empty-note">No links have been added yet.</div>'
