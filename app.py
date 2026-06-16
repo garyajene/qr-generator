@@ -1893,11 +1893,22 @@ h1 {{ margin:0 0 8px; font-size:28px; }} p {{ color:#666; line-height:1.45; }}
 label {{ display:block; font-weight:700; margin:14px 0 7px; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }}
 button {{ width:100%; margin-top:18px; padding:14px; border:none; border-radius:12px; background:#111; color:#fff; font-size:16px; font-weight:800; cursor:pointer; }}
+.show-pass-row {{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:700; color:#333; }}
+.show-pass-row input {{ width:auto; padding:0; margin:0; }}
 .nav {{ margin-top:18px; text-align:center; font-size:14px; }} a {{ color:#111; font-weight:800; }}
 </style></head><body>
 <div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}
-<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input type="password" name="password" required autocomplete="current-password"><button type="submit">{safe_title}</button></form>
+<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label><button type="submit">{safe_title}</button></form>
 <div class="nav"><a href="/register">Create Account</a> &nbsp; | &nbsp; <a href="/login">Log In</a> &nbsp; | &nbsp; <a href="/account">My Account</a></div>
+<script>
+const showPasswordToggle = document.getElementById("show_password_toggle");
+const passwordField = document.getElementById("password_field");
+if (showPasswordToggle && passwordField) {{
+    showPasswordToggle.addEventListener("change", function() {{
+        passwordField.type = this.checked ? "text" : "password";
+    }});
+}}
+</script>
 </div></body></html>
 """
 
