@@ -633,6 +633,8 @@ body {{
     background: #ffffff;
 }}
 
+{_app_nav_css()}
+
 h1 {{
     margin-bottom: 24px;
 }}
@@ -1094,6 +1096,7 @@ button {{
 </style>
 </head>
 <body>
+{_app_nav_html()}
 
 <h1>QR Generator</h1>
 
@@ -1877,6 +1880,93 @@ def _current_user_email():
     return session.get("user_email", "")
 
 
+def _app_nav_css():
+    return """
+.buttn-admin-nav {
+    position: sticky;
+    top: 0;
+    z-index: 9999;
+    background: #111;
+    color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+.buttn-admin-nav-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.buttn-admin-brand {
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    font-size: 14px;
+}
+.buttn-admin-links {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.buttn-admin-links a {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.10);
+}
+.buttn-admin-links a:hover {
+    background: rgba(255,255,255,0.20);
+}
+@media (max-width: 640px) {
+    .buttn-admin-nav-inner {
+        align-items: flex-start;
+    }
+    .buttn-admin-links {
+        width: 100%;
+    }
+    .buttn-admin-links a {
+        flex: 1 1 auto;
+        text-align: center;
+    }
+}
+"""
+
+
+def _app_nav_html(username=None):
+    user_id = session.get("user_id")
+    if not user_id:
+        return ""
+
+    username = _normalize_buttn_url(username or "")
+    links = [
+        '<a href="/account">Account</a>',
+        '<a href="/generate">QR Generator</a>',
+    ]
+
+    if username:
+        owner_id = _db_profile_owner_id(username) if "_db_profile_owner_id" in globals() else None
+        if (not owner_id) or owner_id == user_id:
+            links.append(f'<a href="/buttn/edit/{html.escape(username)}">Edit Profile</a>')
+            links.append(f'<a href="/{html.escape(username)}">View Profile</a>')
+
+    links.append('<a href="/logout">Log Out</a>')
+
+    return f"""
+<div class="buttn-admin-nav">
+  <div class="buttn-admin-nav-inner">
+    <div class="buttn-admin-brand">BUTTN</div>
+    <div class="buttn-admin-links">{''.join(links)}</div>
+  </div>
+</div>
+"""
+
+
 def _auth_page(title, message=""):
     safe_title = html.escape(title)
     safe_message = html.escape(message or "")
@@ -1960,7 +2050,8 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }} .profile-row:first-child {{ border-top:none; }} .profile-row span {{ color:#555; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
-</style></head><body><div class="wrap">
+{_app_nav_css()}
+</style></head><body>{_app_nav_html()}<div class="wrap">
   <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div>{message_html}<a href="/logout">Log out</a></div>
   <div class="card"><h2>My Profiles</h2>{profile_rows}</div>
   <div class="card"><h2>Reserve a BUTTN URL</h2><form method="post" action="/account/create-profile"><label>Choose your URL</label><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></form></div>
@@ -2562,9 +2653,11 @@ body {{ margin:0; font-family:Arial,sans-serif; background:{safe_page_bg}; color
 .back-link {{ display:block; text-align:center; margin-top:18px; color:#111; font-weight:800; text-decoration:none; }}
 .copy-status {{ text-align:center; color:#555; font-size:13px; min-height:18px; margin-top:12px; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding:6px 20px 26px; }}
+{_app_nav_css()}
 </style>
 </head>
 <body>
+{_app_nav_html(username)}
 <div class="phone-shell">
   <div class="profile-header">
     <div class="profile-logo">{_profile_logo_html(profile)}</div>
@@ -2717,9 +2810,11 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
+{_app_nav_css()}
 </style>
 </head>
 <body>
+{_app_nav_html(username)}
 <div class="phone-shell">
   <div class="profile-header">
     {header_image_html}
@@ -2883,10 +2978,12 @@ input[type="range"] {{ width:100%; }}
 .preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
 .preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
+{_app_nav_css()}
 @media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} }}
 </style>
 </head>
 <body>
+{_app_nav_html(username)}
 <div class="builder-wrap">
   <div class="builder-head">
     <h1>Create Your BUTTN Profile</h1>
