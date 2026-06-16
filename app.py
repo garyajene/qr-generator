@@ -2771,7 +2771,7 @@ input[type="range"] {{ width:100%; }}
       <div class="panel">
         <h2>Profile Identity</h2>
         <div class="field"><label>BUTTN URL</label><input id="buttn_url_input" type="text" name="buttn_url" value="{val('buttn_url', username)}"><div class="small-help">Example: /tshirt-help-desk</div></div>
-        <div class="field"><label>Name / Brand</label><input id="name_input" type="text" name="name" value="{val('name')}"></div>
+        <div class="field"><label>Name / Brand</label><input id="name_input" type="text" name="name" value="{html.escape(str(profile.get('name') or _display_name_from_username(username) or ''))}"></div>
         <div class="field"><label>Title / Company</label><input id="title_input" type="text" name="title" value="{val('title')}"></div>
         <div class="field"><label>Phone</label><input id="phone_input" type="tel" name="phone" value="{val('phone')}"></div>
         <div class="field"><label>Email</label><input id="email_input" type="email" name="email" value="{val('email')}"></div>
@@ -2813,7 +2813,7 @@ input[type="range"] {{ width:100%; }}
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
-      <div class="preview-note">Live Preview (updates instantly) — Current public page: <strong>/{html.escape(username)}</strong></div>
+      <div class="preview-note">Live Preview (updates instantly) — Your BUTTN URL: <strong id="current_public_url">https://mybuttn.com/{html.escape(username)}</strong></div>
       <div id="live_buttn_preview" style="width:100%; min-height:680px; background:#ffffff;"></div>
     </div>
   </div>
@@ -2872,7 +2872,22 @@ function collectLinks() {{
     }});
     return html || '<div class="empty-note">No links have been added yet.</div>';
 }}
+function normalizeButtnSlug(value) {{
+    let v = String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
+    v = v.replace(/[^a-z0-9-]/g, "");
+    while (v.includes("--")) v = v.replace(/--/g, "-");
+    return v.replace(/^-+|-+$/g, "");
+}}
+function updateCurrentPublicUrl() {{
+    const urlInput = getEl("buttn_url_input");
+    const urlDisplay = getEl("current_public_url");
+    if (!urlDisplay) return;
+    const slug = normalizeButtnSlug(urlInput ? urlInput.value : {json.dumps(username)});
+    urlDisplay.textContent = "https://mybuttn.com/" + (slug || {json.dumps(username)});
+}}
+
 function renderLivePreview() {{
+    updateCurrentPublicUrl();
     const root = getEl("live_buttn_preview");
     if (!root) return;
 
