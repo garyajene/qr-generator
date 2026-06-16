@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, session
 from io import BytesIO
 import base64
 import random
@@ -9,9 +9,11 @@ import html
 import json
 import os
 from sqlalchemy import create_engine, text
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+app.secret_key = os.environ.get("SECRET_KEY", "buttn-dev-secret-change-later")
 
 
 # -----------------------------
@@ -1862,6 +1864,277 @@ def db_status():
 
 
 
+
+# -----------------------------
+# BUTTN USER ACCOUNT SYSTEM - DATABASE BACKED
+# -----------------------------
+
+def _current_user_id():
+    return session.get("user_id")
+
+
+def _current_user_email():
+    return session.get("user_email", "")
+
+
+def _auth_page(title, message=""):
+    safe_title = html.escape(title)
+    safe_message = html.escape(message or "")
+    message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
+    return f"""
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{safe_title} | BUTTN</title>
+<style>
+body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
+.auth-wrap {{ max-width:430px; margin:60px auto; background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:26px; box-shadow:0 8px 24px rgba(0,0,0,0.05); }}
+h1 {{ margin:0 0 8px; font-size:28px; }} p {{ color:#666; line-height:1.45; }}
+.message {{ background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; padding:12px; border-radius:10px; margin:14px 0; }}
+label {{ display:block; font-weight:700; margin:14px 0 7px; }}
+input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }}
+button {{ width:100%; margin-top:18px; padding:14px; border:none; border-radius:12px; background:#111; color:#fff; font-size:16px; font-weight:800; cursor:pointer; }}
+.nav {{ margin-top:18px; text-align:center; font-size:14px; }} a {{ color:#111; font-weight:800; }}
+</style></head><body>
+<div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}
+<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input type="password" name="password" required autocomplete="current-password"><button type="submit">{safe_title}</button></form>
+<div class="nav"><a href="/register">Create Account</a> &nbsp; | &nbsp; <a href="/login">Log In</a> &nbsp; | &nbsp; <a href="/account">My Account</a></div>
+</div></body></html>
+"""
+
+
+def _dashboard_page(message=""):
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+
+    rows = []
+    if engine is not None:
+        try:
+            init_database()
+            with engine.connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT username, name, title, updated_at
+                    FROM profiles
+                    WHERE user_id = :user_id
+                    ORDER BY updated_at DESC, id DESC
+                """), {"user_id": user_id}).mappings().all()
+        except Exception:
+            rows = []
+
+    profile_rows = ""
+    for row in rows:
+        username = html.escape(row.get("username") or "")
+        name = html.escape(row.get("name") or "Untitled")
+        title = html.escape(row.get("title") or "")
+        profile_rows += f'''
+        <div class="profile-row">
+            <div><strong>{name}</strong><br><span>/buttn/{username}</span><br><small>{title}</small></div>
+            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/buttn/{username}" target="_blank">View</a></div>
+        </div>
+        '''
+
+    if not profile_rows:
+        profile_rows = '<p class="empty">No saved BUTTN profiles yet. Create your first one below.</p>'
+
+    safe_email = html.escape(_current_user_email())
+    safe_message = html.escape(message or "")
+    message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
+    return f"""
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>My BUTTN Account</title>
+<style>
+body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }} .wrap {{ max-width:760px; margin:40px auto; padding:20px; }}
+.card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
+h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0; border:1px solid #c6e8ce; padding:12px; border-radius:10px; margin:14px 0; }}
+.profile-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }} .profile-row:first-child {{ border-top:none; }} .profile-row span {{ color:#555; }}
+a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
+input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
+</style></head><body><div class="wrap">
+  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div>{message_html}<a href="/logout">Log out</a></div>
+  <div class="card"><h2>My Profiles</h2>{profile_rows}</div>
+  <div class="card"><h2>Reserve a BUTTN URL</h2><form method="post" action="/account/create-profile"><label>Choose your URL</label><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></form></div>
+</div></body></html>
+"""
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if engine is None:
+        return _auth_page("Create Account", "Database is not connected yet.")
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        if not email or not password:
+            return _auth_page("Create Account", "Email and password are required.")
+        if len(password) < 6:
+            return _auth_page("Create Account", "Password must be at least 6 characters.")
+        try:
+            init_database()
+            password_hash = generate_password_hash(password)
+            with engine.begin() as conn:
+                user = conn.execute(text("""
+                    INSERT INTO users (email, password_hash, account_type)
+                    VALUES (:email, :password_hash, 'free')
+                    RETURNING id, email
+                """), {"email": email, "password_hash": password_hash}).mappings().one()
+            session["user_id"] = user["id"]
+            session["user_email"] = user["email"]
+            return redirect("/account")
+        except Exception as exc:
+            msg = str(exc)
+            if "duplicate" in msg.lower() or "unique" in msg.lower():
+                return _auth_page("Create Account", "That email already has an account. Please log in.")
+            return _auth_page("Create Account", "Account could not be created.")
+    return _auth_page("Create Account")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if engine is None:
+        return _auth_page("Log In", "Database is not connected yet.")
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        try:
+            init_database()
+            with engine.connect() as conn:
+                user = conn.execute(text("SELECT id, email, password_hash FROM users WHERE email = :email"), {"email": email}).mappings().first()
+            if user and check_password_hash(user["password_hash"], password):
+                session["user_id"] = user["id"]
+                session["user_email"] = user["email"]
+                return redirect("/account")
+        except Exception:
+            pass
+        return _auth_page("Log In", "Email or password is incorrect.")
+    return _auth_page("Log In")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+@app.route("/account")
+def account_dashboard():
+    return _dashboard_page()
+
+
+def _db_profile_exists(username):
+    if engine is None:
+        return False
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT id FROM profiles WHERE username = :username"), {"username": username}).first()
+        return row is not None
+    except Exception:
+        return False
+
+
+def _db_profile_owner_id(username):
+    if engine is None:
+        return None
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT user_id FROM profiles WHERE username = :username"), {"username": username}).first()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _load_db_profile(username):
+    if engine is None:
+        return None
+    try:
+        init_database()
+        with engine.connect() as conn:
+            profile = conn.execute(text("SELECT * FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
+            if not profile:
+                return None
+            links = conn.execute(text("""
+                SELECT icon, label, url
+                FROM profile_links
+                WHERE profile_id = :profile_id
+                ORDER BY sort_order ASC, id ASC
+            """), {"profile_id": profile["id"]}).mappings().all()
+        data = dict(profile)
+        data["buttn_url"] = data.get("username", username)
+        data["links"] = [dict(item) for item in links]
+        return data
+    except Exception:
+        return None
+
+
+def _save_db_profile(username, profile, user_id):
+    if engine is None or not user_id:
+        return False
+    username = _normalize_buttn_url(username)
+    if not username:
+        return False
+    try:
+        init_database()
+        save_data = dict(profile)
+        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color"]:
+            save_data.setdefault(key, "")
+        with engine.begin() as conn:
+            existing = conn.execute(text("SELECT id, user_id FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
+            if existing and existing["user_id"] != user_id:
+                return False
+            if existing:
+                profile_id = existing["id"]
+                conn.execute(text("""
+                    UPDATE profiles SET
+                        name=:name, title=:title, phone=:phone, email=:email, logo_b64=:logo_b64, header_image_b64=:header_image_b64,
+                        header_bg_color=:header_bg_color, header_image_opacity=:header_image_opacity, page_bg_color=:page_bg_color,
+                        link_bg_color=:link_bg_color, link_text_color=:link_text_color, link_border_color=:link_border_color,
+                        header_name_color=:header_name_color, header_title_color=:header_title_color, action_bg_color=:action_bg_color,
+                        action_text_color=:action_text_color, action_border_color=:action_border_color, updated_at=NOW()
+                    WHERE id=:profile_id
+                """), {**save_data, "profile_id": profile_id})
+                conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
+            else:
+                profile_id = conn.execute(text("""
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color)
+                    RETURNING id
+                """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
+            for idx, item in enumerate(profile.get("links", [])):
+                conn.execute(text("INSERT INTO profile_links (profile_id, sort_order, icon, label, url) VALUES (:profile_id, :sort_order, :icon, :label, :url)"), {"profile_id": profile_id, "sort_order": idx, "icon": item.get("icon", "custom"), "label": item.get("label", ""), "url": item.get("url", "")})
+        return True
+    except Exception:
+        return False
+
+
+@app.route("/api/check-url")
+def api_check_url():
+    username = _normalize_buttn_url(request.args.get("username") or "")
+    current = _normalize_buttn_url(request.args.get("current") or "")
+    if not username:
+        return json.dumps({"available": False, "username": username, "message": "Enter a URL."}), 200, {"Content-Type": "application/json"}
+    taken = _is_buttn_url_taken(username, current_username=current or None)
+    return json.dumps({"available": not taken, "username": username, "message": "Available" if not taken else "Already taken"}), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/account/create-profile", methods=["POST"])
+def account_create_profile():
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+    username = _normalize_buttn_url(request.form.get("username") or "")
+    if not username:
+        return _dashboard_page("Please enter a valid BUTTN URL.")
+    if _is_buttn_url_taken(username):
+        return _dashboard_page("That BUTTN URL is already taken.")
+    profile = BUTTN_PROFILES["test"].copy()
+    profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
+    profile["buttn_url"] = username
+    profile["name"] = ""
+    profile["title"] = ""
+    _save_db_profile(username, profile, user_id)
+    return redirect(f"/buttn/edit/{username}")
+
 @app.route("/generate", methods=["GET", "POST"])
 def home():
     qr_b64 = None
@@ -2150,6 +2423,7 @@ def _normalize_buttn_url(value):
 
 def _is_buttn_url_taken(url_value, current_username=None):
     normalized = _normalize_buttn_url(url_value)
+    current_username = _normalize_buttn_url(current_username or "")
 
     if not normalized:
         return False
@@ -2157,11 +2431,18 @@ def _is_buttn_url_taken(url_value, current_username=None):
     if normalized in RESERVED_BUTTN_URLS:
         return True
 
-    for existing in BUTTN_PROFILES.keys():
-        if existing == current_username:
-            continue
-        if existing == normalized:
-            return True
+    if normalized in BUTTN_PROFILES and normalized != current_username:
+        return True
+
+    if engine is not None:
+        try:
+            init_database()
+            with engine.connect() as conn:
+                row = conn.execute(text("SELECT username FROM profiles WHERE username = :username"), {"username": normalized}).first()
+            if row is not None and normalized != current_username:
+                return True
+        except Exception:
+            pass
 
     return False
 
@@ -2175,7 +2456,10 @@ def _safe_url(value):
 
 
 def _get_profile(username="test"):
-    username = (username or "test").strip().lower().replace(" ", "-")
+    username = _normalize_buttn_url(username or "test") or "test"
+    db_profile = _load_db_profile(username) if "_load_db_profile" in globals() else None
+    if db_profile:
+        return db_profile
     return BUTTN_PROFILES.get(username) or BUTTN_PROFILES["test"]
 
 
@@ -2318,14 +2602,25 @@ def buttn_test_alias():
 
 @app.route("/buttn/edit/<username>", methods=["GET", "POST"])
 def buttn_edit_profile(username):
-    username = (username or "test").strip().lower().replace(" ", "-") or "test"
-    profile = BUTTN_PROFILES.get(username)
+    username = _normalize_buttn_url(username or "test") or "test"
+    user_id = _current_user_id() if "_current_user_id" in globals() else None
+    db_owner_id = _db_profile_owner_id(username) if "_db_profile_owner_id" in globals() else None
+
+    if db_owner_id and db_owner_id != user_id:
+        return redirect("/login")
+
+    profile = _load_db_profile(username) if "_load_db_profile" in globals() else None
+    if profile is None:
+        profile = BUTTN_PROFILES.get(username)
     if profile is None:
         profile = BUTTN_PROFILES["test"].copy()
         profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
+        profile["buttn_url"] = username
 
     if request.method == "POST":
-        requested_url = (request.form.get("buttn_url") or username).strip().lower().replace(" ", "-") or "test"
+        requested_url = _normalize_buttn_url(request.form.get("buttn_url") or username) or "test"
+        if user_id and _is_buttn_url_taken(requested_url, current_username=username):
+            return _dashboard_page("That BUTTN URL is already taken.")
         profile["buttn_url"] = requested_url
         profile["name"] = (request.form.get("name") or "").strip()
         profile["title"] = (request.form.get("title") or "").strip()
@@ -2366,7 +2661,15 @@ def buttn_edit_profile(username):
         if not links:
             links.append({"icon": "custom", "label": "Button Text", "url": ""})
         profile["links"] = links
-        BUTTN_PROFILES[requested_url] = profile
+        profile["buttn_url"] = requested_url
+
+        if user_id:
+            saved = _save_db_profile(requested_url, profile, user_id)
+            if not saved:
+                return _dashboard_page("Profile could not be saved. That URL may already be taken.")
+        else:
+            BUTTN_PROFILES[requested_url] = profile
+
         return redirect(f"/buttn/{requested_url}")
 
     def val(key, fallback=""):
