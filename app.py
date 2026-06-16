@@ -2489,49 +2489,122 @@ def _profile_logo_html(profile):
     return f'<div class="profile-logo-fallback">{initial}</div>'
 
 
-def _vcard_escape(value):
-    value = str(value or "")
-    value = value.replace("\\", "\\\\")
-    value = value.replace("\n", "\\n").replace("\r", "")
-    value = value.replace(";", "\\;").replace(",", "\\,")
-    return value
-
 
 @app.route("/buttn/contact/<username>")
-def buttn_download_contact(username):
+def buttn_contact_page(username):
     username = _normalize_buttn_url(username or "test") or "test"
     profile = _get_profile(username)
 
-    name = (profile.get("name") or _display_name_from_username(username) or username).strip()
-    title = (profile.get("title") or "").strip()
-    phone = (profile.get("phone") or "").strip()
-    email_addr = (profile.get("email") or "").strip()
-    profile_url = f"https://mybuttn.com/{username}"
+    safe_name = html.escape((profile.get("name") or _display_name_from_username(username) or username).strip())
+    safe_title = html.escape((profile.get("title") or "").strip())
+    safe_phone = html.escape((profile.get("phone") or "").strip())
+    safe_email = html.escape((profile.get("email") or "").strip())
+    safe_profile_url = html.escape(f"https://mybuttn.com/{username}")
 
-    lines = [
-        "BEGIN:VCARD",
-        "VERSION:3.0",
-        f"FN:{_vcard_escape(name)}",
-    ]
+    safe_header_bg = _clean_hex(profile.get("header_bg_color"), "#9d5d4d")
+    safe_page_bg = _clean_hex(profile.get("page_bg_color"), "#f5f5f5")
+    safe_action_bg = _clean_hex(profile.get("action_bg_color"), "#ffffff")
+    safe_action_text = _clean_hex(profile.get("action_text_color"), "#111111")
+    safe_action_border = _clean_hex(profile.get("action_border_color"), "#d8dde6")
+    safe_header_name_color = _clean_hex(profile.get("header_name_color"), "#111111")
+    safe_header_title_color = _clean_hex(profile.get("header_title_color"), "#555555")
 
-    if title:
-        lines.append(f"ORG:{_vcard_escape(title)}")
-    if phone:
-        lines.append(f"TEL;TYPE=CELL:{_vcard_escape(phone)}")
-    if email_addr:
-        lines.append(f"EMAIL;TYPE=INTERNET:{_vcard_escape(email_addr)}")
+    phone_block = ""
+    if safe_phone:
+        phone_block = f"""
+        <div class="contact-row">
+          <div class="contact-label">Phone</div>
+          <div class="contact-value">{safe_phone}</div>
+          <div class="contact-actions">
+            <a class="contact-btn" href="tel:{safe_phone}">Call</a>
+            <button type="button" class="contact-btn" onclick="copyText('{safe_phone}')">Copy</button>
+          </div>
+        </div>
+        """
 
-    lines.append(f"URL:{_vcard_escape(profile_url)}")
-    lines.append("END:VCARD")
+    email_block = ""
+    if safe_email:
+        email_block = f"""
+        <div class="contact-row">
+          <div class="contact-label">Email</div>
+          <div class="contact-value">{safe_email}</div>
+          <div class="contact-actions">
+            <a class="contact-btn" href="mailto:{safe_email}">Email</a>
+            <button type="button" class="contact-btn" onclick="copyText('{safe_email}')">Copy</button>
+          </div>
+        </div>
+        """
 
-    vcard = "\r\n".join(lines) + "\r\n"
-    filename = f"{username}.vcf"
-
-    return Response(
-        vcard,
-        mimetype="text/vcard; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{safe_name} Contact | BUTTN</title>
+<style>
+* {{ box-sizing:border-box; }}
+body {{ margin:0; font-family:Arial,sans-serif; background:{safe_page_bg}; color:#111; }}
+.phone-shell {{ max-width:430px; margin:0 auto; min-height:100vh; background:{safe_page_bg}; box-shadow:0 0 28px rgba(0,0,0,0.08); }}
+.profile-header {{ background:{safe_header_bg}; padding:44px 22px 28px; text-align:center; }}
+.profile-logo {{ width:116px; height:116px; margin:0 auto 16px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; border:4px solid rgba(255,255,255,0.85); box-shadow:0 12px 30px rgba(0,0,0,0.16); overflow:hidden; }}
+.profile-logo-img {{ width:100%; height:100%; object-fit:cover; }}
+.profile-logo-fallback {{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:50px; font-weight:800; color:#111; background:#fff; }}
+.profile-name {{ font-size:25px; font-weight:800; color:{safe_header_name_color}; }}
+.profile-title {{ font-size:15px; color:{safe_header_title_color}; margin-top:6px; }}
+.contact-area {{ padding:24px 20px 34px; }}
+.contact-note {{ background:#fff; border:1px solid #dde1e7; border-radius:16px; padding:15px; color:#555; font-size:14px; line-height:1.4; margin-bottom:16px; }}
+.contact-row {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:16px; margin-bottom:14px; box-shadow:0 8px 18px rgba(0,0,0,0.04); }}
+.contact-label {{ font-size:13px; color:#777; font-weight:700; margin-bottom:6px; }}
+.contact-value {{ font-size:17px; font-weight:800; word-break:break-word; }}
+.contact-actions {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }}
+.contact-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 16px; font-weight:800; font-size:14px; cursor:pointer; font-family:Arial,sans-serif; }}
+.back-link {{ display:block; text-align:center; margin-top:18px; color:#111; font-weight:800; text-decoration:none; }}
+.copy-status {{ text-align:center; color:#555; font-size:13px; min-height:18px; margin-top:12px; }}
+.buttn-footer {{ text-align:center; font-size:12px; color:#777; padding:6px 20px 26px; }}
+</style>
+</head>
+<body>
+<div class="phone-shell">
+  <div class="profile-header">
+    <div class="profile-logo">{_profile_logo_html(profile)}</div>
+    <div class="profile-name">{safe_name}</div>
+    <div class="profile-title">{safe_title}</div>
+  </div>
+  <div class="contact-area">
+    <div class="contact-note">No file will download. Use the buttons below to call, email, or copy the contact details into your phone.</div>
+    {phone_block}
+    {email_block}
+    <div class="contact-row">
+      <div class="contact-label">BUTTN Page</div>
+      <div class="contact-value">{safe_profile_url}</div>
+      <div class="contact-actions">
+        <a class="contact-btn" href="/{html.escape(username)}">Open Page</a>
+        <button type="button" class="contact-btn" onclick="copyText('{safe_profile_url}')">Copy</button>
+      </div>
+    </div>
+    <div id="copy_status" class="copy-status"></div>
+    <a class="back-link" href="/{html.escape(username)}">Back to Profile</a>
+  </div>
+  <div class="buttn-footer">Powered by BUTTN</div>
+</div>
+<script>
+function copyText(value) {{
+    const status = document.getElementById("copy_status");
+    if (!navigator.clipboard) {{
+        if (status) status.textContent = "Copy not available on this browser.";
+        return;
+    }}
+    navigator.clipboard.writeText(value).then(function() {{
+        if (status) status.textContent = "Copied.";
+    }}).catch(function() {{
+        if (status) status.textContent = "Copy failed. Press and hold the text to copy.";
+    }});
+}}
+</script>
+</body>
+</html>
+"""
 
 
 @app.route("/buttn/start/<username>", methods=["POST"])
@@ -2594,7 +2667,7 @@ def buttn_public_profile(username):
         action_buttons += f'<a class="action-btn" href="tel:{safe_phone}">Call</a>'
     if safe_email:
         action_buttons += f'<a class="action-btn" href="mailto:{safe_email}">Email</a>'
-    action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Save Contact</a>'
+    action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Contact Info</a>'
 
     links_html = ""
     for item in profile.get("links", []):
@@ -2845,13 +2918,13 @@ input[type="range"] {{ width:100%; }}
         <button type="button" id="add_link_btn" class="add-link-btn">+ Add Link</button>
       </div>
       <div class="panel">
-        <h2>Header Text & Save Contact</h2>
+        <h2>Header Text & Contact Button</h2>
         <div class="color-grid">
           <div class="field"><label>Name Text</label><input id="header_name_color_input" type="color" name="header_name_color" value="{val('header_name_color', '#111111')}"></div>
           <div class="field"><label>Title Text</label><input id="header_title_color_input" type="color" name="header_title_color" value="{val('header_title_color', '#555555')}"></div>
-          <div class="field"><label>Save Contact Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
-          <div class="field"><label>Save Contact Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
-          <div class="field"><label>Save Contact Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
+          <div class="field"><label>Contact Button</label><input id="action_bg_color_input" type="color" name="action_bg_color" value="{val('action_bg_color', '#ffffff')}"></div>
+          <div class="field"><label>Contact Button Text</label><input id="action_text_color_input" type="color" name="action_text_color" value="{val('action_text_color', '#111111')}"></div>
+          <div class="field"><label>Contact Button Border</label><input id="action_border_color_input" type="color" name="action_border_color" value="{val('action_border_color', '#d8dde6')}"></div>
         </div>
       </div>
       <div class="panel">
@@ -2972,7 +3045,7 @@ function renderLivePreview() {{
     let actions = "";
     if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
     if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
-    actions += '<a class="action-btn" href="#">Save Contact</a>';
+    actions += '<a class="action-btn" href="#">Contact Info</a>';
 
     root.innerHTML = `
 <style>
