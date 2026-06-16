@@ -3,3 +3,5 @@ segno
 pillow
 requests
 gunicorn
+sqlalchemy
+psycopg2-binary
