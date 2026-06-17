@@ -2049,7 +2049,7 @@ if (showPasswordToggle && passwordField) {{
 """
 
 
-def _dashboard_page(message=""):
+def _dashboard_page(message="", url_message=""):
     user_id = _current_user_id()
     if not user_id:
         return redirect("/login")
@@ -2085,7 +2085,9 @@ def _dashboard_page(message=""):
 
     safe_email = html.escape(_current_user_email())
     safe_message = html.escape(message or "")
+    safe_url_message = html.escape(url_message or "")
     message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
+    url_message_html = f'<div class="url-message">{safe_url_message}</div>' if safe_url_message else ""
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>My BUTTN Account</title>
@@ -2096,11 +2098,15 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }} .profile-row:first-child {{ border-top:none; }} .profile-row span {{ color:#555; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
+.reserve-url-row {{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }}
+.reserve-url-row input {{ flex:1 1 260px; }}
+.reserve-url-row button {{ margin-top:0; white-space:nowrap; }}
+.url-message {{ margin-top:10px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
 {_app_nav_css()}
 </style></head><body>{_app_nav_html()}<div class="wrap">
   <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div>{message_html}<a href="/logout">Log out</a></div>
   <div class="card"><h2>My Profiles</h2>{profile_rows}</div>
-  <div class="card"><h2>Reserve a BUTTN URL</h2><form method="post" action="/account/create-profile"><label>Choose your URL</label><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></form></div>
+  <div class="card"><h2>Reserve a BUTTN URL</h2><form method="post" action="/account/create-profile"><label>Choose your URL</label><div class="reserve-url-row"><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></div>{url_message_html}</form></div>
 </div></body></html>
 """
 
@@ -2275,9 +2281,9 @@ def account_create_profile():
         return redirect("/login")
     username = _normalize_buttn_url(request.form.get("username") or "")
     if not username:
-        return _dashboard_page("Please enter a valid BUTTN URL.")
+        return _dashboard_page(url_message="Please enter a valid BUTTN URL.")
     if _is_buttn_url_taken(username):
-        return _dashboard_page("That BUTTN URL is already taken.")
+        return _dashboard_page(url_message="That BUTTN URL is already taken.")
     profile = BUTTN_PROFILES["test"].copy()
     profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
     profile["buttn_url"] = username
@@ -2918,7 +2924,7 @@ def buttn_edit_profile(username):
     if request.method == "POST":
         requested_url = _normalize_buttn_url(request.form.get("buttn_url") or username) or "test"
         if user_id and _is_buttn_url_taken(requested_url, current_username=username):
-            return _dashboard_page("That BUTTN URL is already taken.")
+            return _dashboard_page(url_message="That BUTTN URL is already taken.")
         profile["buttn_url"] = requested_url
         profile["name"] = (request.form.get("name") or "").strip()
         profile["title"] = (request.form.get("title") or "").strip()
