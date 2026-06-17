@@ -8,12 +8,52 @@ import segno
 import html
 import json
 import os
+import urllib.parse
+import urllib.request
 from sqlalchemy import create_engine, text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 app.secret_key = os.environ.get("SECRET_KEY", "buttn-dev-secret-change-later")
+
+TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "").strip()
+TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "").strip()
+
+
+def verify_turnstile_response(token, remote_ip=None):
+    """
+    Validate Cloudflare Turnstile on the server side.
+    If keys are missing, fail closed for account creation.
+    """
+    if not TURNSTILE_SECRET_KEY:
+        return False
+
+    token = (token or "").strip()
+    if not token:
+        return False
+
+    payload = {
+        "secret": TURNSTILE_SECRET_KEY,
+        "response": token,
+    }
+
+    if remote_ip:
+        payload["remoteip"] = remote_ip
+
+    try:
+        data = urllib.parse.urlencode(payload).encode("utf-8")
+        req = urllib.request.Request(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data=data,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        return bool(result.get("success"))
+    except Exception:
+        return False
+
 
 
 # -----------------------------
@@ -1971,10 +2011,15 @@ def _auth_page(title, message=""):
     safe_title = html.escape(title)
     safe_message = html.escape(message or "")
     message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
+    is_register_page = (title == "Create Account")
+    turnstile_script = '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' if is_register_page and TURNSTILE_SITE_KEY else ""
+    turnstile_widget = f'<div class="turnstile-wrap"><div class="cf-turnstile" data-sitekey="{html.escape(TURNSTILE_SITE_KEY)}"></div></div>' if is_register_page and TURNSTILE_SITE_KEY else ""
+    turnstile_missing = '<div class="message">Turnstile is not configured yet.</div>' if is_register_page and not TURNSTILE_SITE_KEY else ""
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{safe_title} | BUTTN</title>
+{turnstile_script}
 <style>
 body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
 .auth-wrap {{ max-width:430px; margin:60px auto; background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:26px; box-shadow:0 8px 24px rgba(0,0,0,0.05); }}
@@ -1983,12 +2028,13 @@ h1 {{ margin:0 0 8px; font-size:28px; }} p {{ color:#666; line-height:1.45; }}
 label {{ display:block; font-weight:700; margin:14px 0 7px; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }}
 button {{ width:100%; margin-top:18px; padding:14px; border:none; border-radius:12px; background:#111; color:#fff; font-size:16px; font-weight:800; cursor:pointer; }}
+.turnstile-wrap {{ margin-top:16px; display:flex; justify-content:center; }}
 .show-pass-row {{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:700; color:#333; }}
 .show-pass-row input {{ width:auto; padding:0; margin:0; }}
 .nav {{ margin-top:18px; text-align:center; font-size:14px; }} a {{ color:#111; font-weight:800; }}
 </style></head><body>
-<div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}
-<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label><button type="submit">{safe_title}</button></form>
+<div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}{turnstile_missing}
+<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label>{turnstile_widget}<button type="submit">{safe_title}</button></form>
 <div class="nav"><a href="/register">Create Account</a> &nbsp; | &nbsp; <a href="/login">Log In</a> &nbsp; | &nbsp; <a href="/account">My Account</a></div>
 <script>
 const showPasswordToggle = document.getElementById("show_password_toggle");
@@ -2066,6 +2112,9 @@ def register():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
+        turnstile_token = request.form.get("cf-turnstile-response") or ""
+        if not verify_turnstile_response(turnstile_token, request.headers.get("CF-Connecting-IP") or request.remote_addr):
+            return _auth_page("Create Account", "Please complete the security check.")
         if not email or not password:
             return _auth_page("Create Account", "Email and password are required.")
         if len(password) < 6:
