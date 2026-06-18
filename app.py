@@ -132,6 +132,24 @@ def init_database():
             )
         """))
 
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS profile_views (
+                id SERIAL PRIMARY KEY,
+                profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS link_clicks (
+                id SERIAL PRIMARY KEY,
+                profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                link_label TEXT DEFAULT '',
+                link_url TEXT DEFAULT '',
+                clicked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
     _db_initialized = True
 
 
@@ -2076,7 +2094,7 @@ def _dashboard_page(message="", url_message=""):
         profile_rows += f'''
         <div class="profile-row">
             <div><strong>{name}</strong><br><span>/{username}</span><br><small>{title}</small></div>
-            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/{username}" target="_blank">View</a></div>
+            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/{username}" target="_blank">View</a> &nbsp; <a href="/account/analytics/{username}">Analytics</a></div>
         </div>
         '''
 
@@ -2635,6 +2653,140 @@ def _profile_logo_html(profile):
     return f'<div class="profile-logo-fallback">{initial}</div>'
 
 
+def _db_profile_id(username):
+    if engine is None:
+        return None
+    username = _normalize_buttn_url(username)
+    if not username:
+        return None
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT id FROM profiles WHERE username = :username"), {"username": username}).first()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _record_profile_view(username):
+    profile_id = _db_profile_id(username)
+    if not profile_id or engine is None:
+        return
+    try:
+        init_database()
+        with engine.begin() as conn:
+            conn.execute(text("INSERT INTO profile_views (profile_id) VALUES (:profile_id)"), {"profile_id": profile_id})
+    except Exception:
+        pass
+
+
+def _record_link_click(username, link_label, link_url):
+    profile_id = _db_profile_id(username)
+    if not profile_id or engine is None:
+        return
+    try:
+        init_database()
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO link_clicks (profile_id, link_label, link_url)
+                VALUES (:profile_id, :link_label, :link_url)
+            """), {"profile_id": profile_id, "link_label": link_label or "", "link_url": link_url or ""})
+    except Exception:
+        pass
+
+
+def _get_profile_analytics(username):
+    profile_id = _db_profile_id(username)
+    data = {"views": 0, "clicks": []}
+    if not profile_id or engine is None:
+        return data
+    try:
+        init_database()
+        with engine.connect() as conn:
+            data["views"] = conn.execute(text("SELECT COUNT(*) FROM profile_views WHERE profile_id = :profile_id"), {"profile_id": profile_id}).scalar() or 0
+            rows = conn.execute(text("""
+                SELECT link_label, link_url, COUNT(*) AS click_count
+                FROM link_clicks
+                WHERE profile_id = :profile_id
+                GROUP BY link_label, link_url
+                ORDER BY click_count DESC, link_label ASC
+            """), {"profile_id": profile_id}).mappings().all()
+        data["clicks"] = [dict(row) for row in rows]
+    except Exception:
+        pass
+    return data
+
+
+
+
+@app.route("/account/analytics/<username>")
+def account_profile_analytics(username):
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+
+    username = _normalize_buttn_url(username)
+    owner_id = _db_profile_owner_id(username)
+    if not owner_id or owner_id != user_id:
+        return redirect("/account")
+
+    profile = _get_profile(username)
+    analytics = _get_profile_analytics(username)
+    safe_username = html.escape(username)
+    safe_name = html.escape(profile.get("name") or _display_name_from_username(username) or username)
+    view_count = int(analytics.get("views") or 0)
+
+    click_rows = ""
+    for row in analytics.get("clicks", []):
+        label = html.escape(row.get("link_label") or "Untitled Link")
+        url = html.escape(row.get("link_url") or "")
+        count = int(row.get("click_count") or 0)
+        click_rows += f"""
+        <div class="analytics-row">
+            <div><strong>{label}</strong><br><span>{url}</span></div>
+            <div class="count">{count}</div>
+        </div>
+        """
+
+    if not click_rows:
+        click_rows = '<p class="empty">No link clicks recorded yet.</p>'
+
+    return f"""
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics | BUTTN</title>
+<style>
+body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
+.wrap {{ max-width:760px; margin:40px auto; padding:20px; }}
+.card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
+h1 {{ margin:0 0 6px; }} .muted, .empty {{ color:#666; }}
+.big-number {{ font-size:46px; font-weight:900; margin-top:10px; }}
+.analytics-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }}
+.analytics-row:first-child {{ border-top:none; }}
+.analytics-row span {{ color:#666; font-size:13px; word-break:break-all; }}
+.count {{ font-size:24px; font-weight:900; }}
+a {{ color:#111; font-weight:800; }}
+{_app_nav_css()}
+</style></head>
+<body>{_app_nav_html(username)}
+<div class="wrap">
+  <div class="card">
+    <h1>Analytics</h1>
+    <div class="muted">{safe_name} /{safe_username}</div>
+    <p><a href="/account">Back to Account</a> &nbsp; <a href="/{safe_username}" target="_blank">View Profile</a></p>
+  </div>
+  <div class="card">
+    <h2>Profile Views</h2>
+    <div class="big-number">{view_count}</div>
+  </div>
+  <div class="card">
+    <h2>Link Clicks</h2>
+    {click_rows}
+  </div>
+</div>
+</body></html>
+"""
+
 
 @app.route("/buttn/contact/<username>")
 def buttn_contact_page(username):
@@ -2784,7 +2936,9 @@ def buttn_start_from_qr(username):
 
 @app.route("/buttn/<username>")
 def buttn_public_profile(username):
+    username = _normalize_buttn_url(username or "test") or "test"
     profile = _get_profile(username)
+    _record_profile_view(username)
     safe_name = html.escape(profile.get("name", ""))
     safe_title = html.escape(profile.get("title", ""))
     safe_phone = html.escape(profile.get("phone", ""))
@@ -2818,11 +2972,16 @@ def buttn_public_profile(username):
     action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Contact Info</a>'
 
     links_html = ""
-    for item in profile.get("links", []):
+    for idx, item in enumerate(profile.get("links", []), start=1):
         label_raw = (item.get("label") or "").strip()
         url_raw = (item.get("url") or "").strip()
         label = html.escape(label_raw)
-        url = html.escape(_safe_url(url_raw)) if url_raw else "#"
+        safe_destination = _safe_url(url_raw) if url_raw else ""
+        if safe_destination:
+            quoted_destination = urllib.parse.quote(safe_destination, safe="")
+            url = f"/buttn/click/{html.escape(_normalize_buttn_url(username))}/{idx}?u={quoted_destination}"
+        else:
+            url = "#"
         icon_key = _normalize_link_icon(item.get("icon") or _guess_icon_from_label(label_raw))
 
         # IMPORTANT BUG FIX:
@@ -2887,6 +3046,32 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 </body>
 </html>
 """
+
+
+
+@app.route("/buttn/click/<username>/<int:link_index>")
+def buttn_track_link_click(username, link_index):
+    username = _normalize_buttn_url(username)
+    destination = request.args.get("u") or ""
+    profile = _get_profile(username)
+    label = ""
+    raw_url = ""
+
+    try:
+        links = profile.get("links", [])
+        if 1 <= link_index <= len(links):
+            item = links[link_index - 1]
+            label = item.get("label", "")
+            raw_url = _safe_url(item.get("url", ""))
+    except Exception:
+        pass
+
+    final_url = destination or raw_url
+    if not final_url:
+        return redirect(f"/{username}")
+
+    _record_link_click(username, label, final_url)
+    return redirect(final_url)
 
 
 @app.route("/<username>")
