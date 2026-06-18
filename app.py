@@ -2086,6 +2086,10 @@ def _dashboard_page(message="", url_message=""):
         except Exception:
             rows = []
 
+    profile_count = len(rows)
+    profile_limit = MAX_ACCOUNT_PROFILES
+    profile_count_text = f"Profiles: {profile_count} / {profile_limit}"
+
     profile_rows = ""
     for row in rows:
         username = html.escape(row.get("username") or "")
@@ -2119,12 +2123,13 @@ input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5
 .reserve-url-row {{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }}
 .reserve-url-row input {{ flex:1 1 260px; }}
 .reserve-url-row button {{ margin-top:0; white-space:nowrap; }}
-.url-message {{ margin-top:10px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
+.url-message, .limit-message {{ margin-top:10px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
+.account-stats {{ margin-top:8px; color:#555; font-weight:800; }}
 {_app_nav_css()}
 </style></head><body>{_app_nav_html()}<div class="wrap">
-  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div>{message_html}<a href="/logout">Log out</a></div>
+  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">{profile_count_text}</div>{message_html}<a href="/logout">Log out</a></div>
   <div class="card"><h2>My Profiles</h2>{profile_rows}</div>
-  <div class="card"><h2>Reserve a BUTTN URL</h2><form method="post" action="/account/create-profile"><label>Choose your URL</label><div class="reserve-url-row"><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></div>{url_message_html}</form></div>
+  <div class="card"><h2>Reserve a BUTTN URL</h2>{('<div class="limit-message">You have reached the 10 profile limit for this account.</div>' if profile_count >= profile_limit else '<form method="post" action="/account/create-profile"><label>Choose your URL</label><div class="reserve-url-row"><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></div>' + url_message_html + '</form>')}</div>
 </div></body></html>
 """
 
@@ -2219,6 +2224,18 @@ def _db_profile_owner_id(username):
         return None
 
 
+def _user_profile_count(user_id):
+    if engine is None or not user_id:
+        return 0
+    try:
+        init_database()
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM profiles WHERE user_id = :user_id"), {"user_id": user_id}).scalar()
+        return int(count or 0)
+    except Exception:
+        return 0
+
+
 def _load_db_profile(username):
     if engine is None:
         return None
@@ -2257,6 +2274,10 @@ def _save_db_profile(username, profile, user_id):
             existing = conn.execute(text("SELECT id, user_id FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
             if existing and existing["user_id"] != user_id:
                 return False
+            if not existing:
+                profile_count = conn.execute(text("SELECT COUNT(*) FROM profiles WHERE user_id = :user_id"), {"user_id": user_id}).scalar() or 0
+                if int(profile_count) >= MAX_ACCOUNT_PROFILES:
+                    return False
             if existing:
                 profile_id = existing["id"]
                 conn.execute(text("""
@@ -2302,6 +2323,8 @@ def account_create_profile():
         return _dashboard_page(url_message="Please enter a valid BUTTN URL.")
     if _is_buttn_url_taken(username):
         return _dashboard_page(url_message="That BUTTN URL is already taken.")
+    if _user_profile_count(user_id) >= MAX_ACCOUNT_PROFILES:
+        return _dashboard_page(url_message="You have reached the 10 profile limit for this account.")
     profile = BUTTN_PROFILES["test"].copy()
     profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
     profile["buttn_url"] = username
@@ -2530,6 +2553,7 @@ SVG_ICON_MAP = {
 
 DEFAULT_LINK_ICON = "custom"
 MAX_PROFILE_LINKS = 15
+MAX_ACCOUNT_PROFILES = 10
 
 
 def _normalize_link_icon(value):
