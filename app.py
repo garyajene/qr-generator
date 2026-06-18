@@ -2089,27 +2089,68 @@ def _dashboard_page(message="", url_message=""):
     profile_count = len(rows)
     profile_limit = MAX_ACCOUNT_PROFILES
     profile_count_text = f"Profiles: {profile_count} / {profile_limit}"
+    is_first_profile = profile_count == 0
 
     profile_rows = ""
-    for row in rows:
-        username = html.escape(row.get("username") or "")
-        name = html.escape(row.get("name") or "Untitled")
+    for idx, row in enumerate(rows, start=1):
+        username_raw = row.get("username") or ""
+        username = html.escape(username_raw)
+        name = html.escape(row.get("name") or _display_name_from_username(username_raw) or "Untitled")
         title = html.escape(row.get("title") or "")
-        profile_rows += f'''
+        title_html = f"<br><small>{title}</small>" if title else ""
+        profile_rows += f"""
         <div class="profile-row">
-            <div><strong>{name}</strong><br><span>/{username}</span><br><small>{title}</small></div>
-            <div><a href="/buttn/edit/{username}">Edit</a> &nbsp; <a href="/{username}" target="_blank">View</a> &nbsp; <a href="/account/analytics/{username}">Analytics</a></div>
+            <div class="profile-main">
+                <div class="profile-number">{idx}</div>
+                <div>
+                    <strong>{name}</strong><br>
+                    <span>/{username}</span>{title_html}
+                </div>
+            </div>
+            <div class="profile-actions">
+                <a href="/buttn/edit/{username}">Edit</a>
+                <a href="/{username}" target="_blank">View</a>
+                <a href="/account/analytics/{username}">Analytics</a>
+            </div>
         </div>
-        '''
+        """
 
     if not profile_rows:
-        profile_rows = '<p class="empty">No saved BUTTN profiles yet. Create your first one below.</p>'
+        profile_rows = '<p class="empty">Create your first BUTTN profile to get started.</p>'
 
     safe_email = html.escape(_current_user_email())
     safe_message = html.escape(message or "")
     safe_url_message = html.escape(url_message or "")
     message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
     url_message_html = f'<div class="url-message">{safe_url_message}</div>' if safe_url_message else ""
+    create_button_text = "Create Profile" if is_first_profile else "+ Create New Profile"
+    modal_title = "Create Profile" if is_first_profile else "Create New Profile"
+    modal_intro = "Name your first profile and choose your BUTTN URL." if is_first_profile else "Add another profile under this same BUTTN account."
+    modal_open_class = " show" if safe_url_message else ""
+    create_form_html = f"""
+        <button type="button" id="open_create_profile_modal" class="create-profile-btn">{create_button_text}</button>
+        {url_message_html}
+        <div id="create_profile_modal" class="modal-overlay{modal_open_class}">
+            <div class="modal-card">
+                <button type="button" id="close_create_profile_modal" class="modal-close">×</button>
+                <h2>{modal_title}</h2>
+                <p class="muted">{modal_intro}</p>
+                <form method="post" action="/account/create-profile">
+                    <label>Profile Name</label>
+                    <input type="text" name="profile_name" placeholder="Dope Tees" required>
+                    <label>BUTTN URL</label>
+                    <div class="url-prefix-row">
+                        <span>mybuttn.com/</span>
+                        <input type="text" name="username" placeholder="dope-tees" required>
+                    </div>
+                    <button type="submit" class="modal-submit">{modal_title}</button>
+                </form>
+            </div>
+        </div>
+    """
+    if profile_count >= profile_limit:
+        create_form_html = '<div class="limit-message">You have reached the 10 profile limit for this account.</div>'
+
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>My BUTTN Account</title>
@@ -2117,20 +2158,62 @@ def _dashboard_page(message="", url_message=""):
 body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }} .wrap {{ max-width:760px; margin:40px auto; padding:20px; }}
 .card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
 h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0; border:1px solid #c6e8ce; padding:12px; border-radius:10px; margin:14px 0; }}
-.profile-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }} .profile-row:first-child {{ border-top:none; }} .profile-row span {{ color:#555; }}
+.profile-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:18px 0; align-items:center; }} .profile-row:first-child {{ border-top:none; }} .profile-row span {{ color:#555; }}
+.profile-main {{ display:flex; align-items:center; gap:14px; }}
+.profile-number {{ width:34px; height:34px; border-radius:999px; background:#111; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:900; flex:0 0 34px; }}
+.profile-actions {{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }}
+.profile-actions a {{ background:#f2f4f7; border-radius:999px; padding:8px 11px; text-decoration:none; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
-.reserve-url-row {{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }}
-.reserve-url-row input {{ flex:1 1 260px; }}
-.reserve-url-row button {{ margin-top:0; white-space:nowrap; }}
-.url-message, .limit-message {{ margin-top:10px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
+.url-message, .limit-message {{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
 .account-stats {{ margin-top:8px; color:#555; font-weight:800; }}
+.profile-card-head {{ display:flex; justify-content:space-between; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }}
+.profile-card-head h2 {{ margin:0; }}
+.create-profile-btn {{ margin-top:0; }}
+.modal-overlay {{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.52); align-items:center; justify-content:center; padding:20px; }}
+.modal-overlay.show {{ display:flex; }}
+.modal-card {{ width:100%; max-width:460px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,0.24); position:relative; }}
+.modal-card h2 {{ margin:0 0 8px; }}
+.modal-close {{ position:absolute; top:14px; right:14px; width:36px; height:36px; border-radius:999px; padding:0; margin:0; background:#f1f1f1; color:#111; font-size:24px; line-height:1; }}
+.url-prefix-row {{ display:flex; align-items:center; border:1px solid #cfd5df; border-radius:10px; overflow:hidden; background:#fff; }}
+.url-prefix-row span {{ padding:0 0 0 12px; color:#666; font-weight:800; white-space:nowrap; }}
+.url-prefix-row input {{ border:none; border-radius:0; }}
+.modal-submit {{ width:100%; padding:14px; }}
 {_app_nav_css()}
+@media (max-width:640px) {{
+    .profile-row {{ align-items:flex-start; flex-direction:column; }}
+    .profile-actions {{ justify-content:flex-start; }}
+}}
 </style></head><body>{_app_nav_html()}<div class="wrap">
   <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">{profile_count_text}</div>{message_html}<a href="/logout">Log out</a></div>
-  <div class="card"><h2>My Profiles</h2>{profile_rows}</div>
-  <div class="card"><h2>Reserve a BUTTN URL</h2>{('<div class="limit-message">You have reached the 10 profile limit for this account.</div>' if profile_count >= profile_limit else '<form method="post" action="/account/create-profile"><label>Choose your URL</label><div class="reserve-url-row"><input type="text" name="username" placeholder="fresh-tees" required><button type="submit">Create Profile</button></div>' + url_message_html + '</form>')}</div>
-</div></body></html>
+  <div class="card">
+    <div class="profile-card-head"><h2>My Profiles</h2>{create_form_html}</div>
+    {profile_rows}
+  </div>
+</div>
+<script>
+const openCreateProfileModal = document.getElementById("open_create_profile_modal");
+const closeCreateProfileModal = document.getElementById("close_create_profile_modal");
+const createProfileModal = document.getElementById("create_profile_modal");
+if (openCreateProfileModal && createProfileModal) {{
+    openCreateProfileModal.addEventListener("click", function() {{
+        createProfileModal.classList.add("show");
+    }});
+}}
+if (closeCreateProfileModal && createProfileModal) {{
+    closeCreateProfileModal.addEventListener("click", function() {{
+        createProfileModal.classList.remove("show");
+    }});
+}}
+if (createProfileModal) {{
+    createProfileModal.addEventListener("click", function(e) {{
+        if (e.target === createProfileModal) {{
+            createProfileModal.classList.remove("show");
+        }}
+    }});
+}}
+</script>
+</body></html>
 """
 
 
@@ -2318,17 +2401,23 @@ def account_create_profile():
     user_id = _current_user_id()
     if not user_id:
         return redirect("/login")
+
+    profile_name = (request.form.get("profile_name") or "").strip()
     username = _normalize_buttn_url(request.form.get("username") or "")
+
+    if not profile_name:
+        return _dashboard_page(url_message="Please enter a profile name.")
     if not username:
         return _dashboard_page(url_message="Please enter a valid BUTTN URL.")
     if _is_buttn_url_taken(username):
         return _dashboard_page(url_message="That BUTTN URL is already taken.")
     if _user_profile_count(user_id) >= MAX_ACCOUNT_PROFILES:
         return _dashboard_page(url_message="You have reached the 10 profile limit for this account.")
+
     profile = BUTTN_PROFILES["test"].copy()
     profile["links"] = [item.copy() for item in BUTTN_PROFILES["test"].get("links", [])]
     profile["buttn_url"] = username
-    profile["name"] = _display_name_from_username(username)
+    profile["name"] = profile_name
     profile["title"] = ""
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
