@@ -2081,7 +2081,7 @@ def _dashboard_page(message="", url_message=""):
                     SELECT username, name, title, updated_at
                     FROM profiles
                     WHERE user_id = :user_id
-                    ORDER BY updated_at DESC, id DESC
+                    ORDER BY created_at ASC, id ASC
                 """), {"user_id": user_id}).mappings().all()
         except Exception:
             rows = []
