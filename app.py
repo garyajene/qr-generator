@@ -3,6 +3,7 @@ from io import BytesIO, StringIO
 import csv
 import base64
 import random
+import re
 from collections import Counter
 from PIL import Image, ImageDraw, ImageStat
 import segno
@@ -2957,6 +2958,165 @@ def _spotlight_embed_url(value):
         return ""
 
 
+
+def _spotlight_youtube_video_id(url):
+    url = _safe_url(url)
+    if not url:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.netloc or "").lower().replace("www.", "")
+        path = parsed.path or ""
+        query = urllib.parse.parse_qs(parsed.query or "")
+
+        if "youtube.com" in host:
+            if path.startswith("/shorts/"):
+                return path.split("/shorts/", 1)[1].split("/")[0]
+            if path.startswith("/watch"):
+                return (query.get("v") or [""])[0]
+            if path.startswith("/embed/"):
+                return path.split("/embed/", 1)[1].split("/")[0]
+
+        if "youtu.be" in host:
+            return path.strip("/").split("/")[0]
+    except Exception:
+        return ""
+    return ""
+
+
+def _fetch_json_url(url, timeout=7):
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BUTTNBot/1.0; +https://mybuttn.com)",
+                "Accept": "application/json,text/html,*/*",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(700000)
+        return json.loads(raw.decode("utf-8", errors="ignore"))
+    except Exception:
+        return None
+
+
+def _fetch_text_url(url, timeout=7):
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(900000)
+        return raw.decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _absolute_url(base_url, maybe_url):
+    maybe_url = (maybe_url or "").strip()
+    if not maybe_url:
+        return ""
+    try:
+        return urllib.parse.urljoin(base_url, maybe_url)
+    except Exception:
+        return maybe_url
+
+
+def _extract_meta_image(page_html, base_url):
+    if not page_html:
+        return ""
+
+    patterns = [
+        r'<meta[^>]+property=["\\\']og:image:secure_url["\\\'][^>]+content=["\\\']([^"\\\']+)["\\\']',
+        r'<meta[^>]+content=["\\\']([^"\\\']+)["\\\'][^>]+property=["\\\']og:image:secure_url["\\\']',
+        r'<meta[^>]+property=["\\\']og:image["\\\'][^>]+content=["\\\']([^"\\\']+)["\\\']',
+        r'<meta[^>]+content=["\\\']([^"\\\']+)["\\\'][^>]+property=["\\\']og:image["\\\']',
+        r'<meta[^>]+name=["\\\']twitter:image["\\\'][^>]+content=["\\\']([^"\\\']+)["\\\']',
+        r'<meta[^>]+content=["\\\']([^"\\\']+)["\\\'][^>]+name=["\\\']twitter:image["\\\']',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, page_html, flags=re.IGNORECASE)
+        if match:
+            return _absolute_url(base_url, html.unescape(match.group(1)))
+
+    return ""
+
+
+def _spotlight_thumbnail_url(value):
+    """
+    Best-effort automatic thumbnail for Spotlight links.
+    Custom uploaded images still win; this only fills the gap when no image is uploaded.
+    """
+    url = _safe_url(value)
+    if not url:
+        return ""
+
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.netloc or "").lower().replace("www.", "")
+
+        youtube_id = _spotlight_youtube_video_id(url)
+        if youtube_id:
+            return "https://img.youtube.com/vi/" + urllib.parse.quote(youtube_id, safe="") + "/hqdefault.jpg"
+
+        if "vimeo.com" in host:
+            data = _fetch_json_url("https://vimeo.com/api/oembed.json?url=" + urllib.parse.quote(url, safe=""))
+            thumb = (data or {}).get("thumbnail_url") or ""
+            if thumb:
+                return thumb
+
+        if "tiktok.com" in host:
+            data = _fetch_json_url("https://www.tiktok.com/oembed?url=" + urllib.parse.quote(url, safe=""))
+            thumb = (data or {}).get("thumbnail_url") or ""
+            if thumb:
+                return thumb
+
+        if "instagram.com" in host:
+            page = _fetch_text_url(url)
+            thumb = _extract_meta_image(page, url)
+            if thumb:
+                return thumb
+
+        if "facebook.com" in host or "fb.watch" in host:
+            page = _fetch_text_url(url)
+            thumb = _extract_meta_image(page, url)
+            if thumb:
+                return thumb
+
+        if "loom.com" in host:
+            data = _fetch_json_url("https://www.loom.com/v1/oembed?url=" + urllib.parse.quote(url, safe=""))
+            thumb = (data or {}).get("thumbnail_url") or ""
+            if thumb:
+                return thumb
+
+        page = _fetch_text_url(url)
+        return _extract_meta_image(page, url)
+    except Exception:
+        return ""
+
+
+@app.route("/api/spotlight-thumbnail")
+def api_spotlight_thumbnail():
+    url = request.args.get("url") or ""
+    thumbnail = _spotlight_thumbnail_url(url)
+    payload = {"thumbnail_url": thumbnail}
+    return json.dumps(payload), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/api/spotlight-thumbnail-image")
+def api_spotlight_thumbnail_image():
+    url = request.args.get("url") or ""
+    thumbnail = _spotlight_thumbnail_url(url)
+    if not thumbnail:
+        return Response(status=404)
+    return redirect(thumbnail)
+
+
 def _get_profile(username="test"):
     username = _normalize_buttn_url(username or "test") or "test"
     db_profile = _load_db_profile(username) if "_load_db_profile" in globals() else None
@@ -3558,16 +3718,19 @@ def buttn_public_profile(username):
         spotlight_behavior = _normalize_spotlight_open_behavior(profile.get("spotlight_open_behavior"))
         spotlight_shape = _normalize_spotlight_media_shape(profile.get("spotlight_media_shape"))
         spotlight_aspect = _spotlight_aspect_style(spotlight_shape)
-        if spotlight_headline_raw or spotlight_image_b64:
+        if spotlight_headline_raw or spotlight_image_b64 or spotlight_url_raw:
             spotlight_headline = html.escape(spotlight_headline_raw or "Featured")
             spotlight_subtext = html.escape((profile.get("spotlight_subtext") or "").strip())
             spotlight_subtext_html = f'<div class="spotlight-subtext">{spotlight_subtext}</div>' if spotlight_subtext else ""
             spotlight_image_html = ""
-            if spotlight_image_b64:
-                play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
-                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
-            spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
             safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
+            spotlight_auto_thumb = _spotlight_thumbnail_url(safe_spotlight_url) if safe_spotlight_url else ""
+            play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
+            if spotlight_image_b64:
+                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
+            elif spotlight_auto_thumb:
+                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="{html.escape(spotlight_auto_thumb)}" alt="Featured Spotlight">{play_html}</div>'
+            spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
             if safe_spotlight_url and spotlight_behavior == "play_page":
                 embed_url = _spotlight_embed_url(safe_spotlight_url)
                 if embed_url:
@@ -4077,7 +4240,7 @@ input[type="range"] {{ width:100%; }}
           <input id="spotlight_image_file_input" type="file" name="spotlight_image_file" accept="image/*">
           <input id="clear_spotlight_image_input" type="hidden" name="clear_spotlight_image" value="0">
           <button type="button" id="clear_spotlight_image_btn" class="secondary-btn">Clear Spotlight Image</button>
-          <div class="small-help">Clearing the image lets the Spotlight use the video/embed preview or text-only card.</div>
+          <div class="small-help">Clearing the image lets BUTTN automatically use the link thumbnail when available, or a text-only card.</div>
         </div>
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
@@ -4152,6 +4315,11 @@ function safeUrl(value) {{
     if (!v) return "";
     if (v.startsWith("http://") || v.startsWith("https://") || v.startsWith("mailto:") || v.startsWith("tel:")) return v;
     return "https://" + v;
+}}
+function spotlightThumbnailProxyUrl(value) {{
+    const href = safeUrl(value);
+    if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return "";
+    return "/api/spotlight-thumbnail-image?url=" + encodeURIComponent(href);
 }}
 function readImageFile(input, callback) {{
     if (!input || !input.files || !input.files[0]) return;
@@ -4244,12 +4412,13 @@ function renderLivePreview() {{
     actions += '<a class="action-btn" href="#">Contact Info</a>';
 
     let spotlightHtml = "";
-    if (spotlightEnabled && ((spotlightHeadline || "").trim() || liveSpotlightImageData)) {{
+    if (spotlightEnabled && ((spotlightHeadline || "").trim() || liveSpotlightImageData || (spotlightUrl || "").trim())) {{
         const mediaShape = ["vertical", "landscape", "square"].includes(spotlightMediaShape) ? spotlightMediaShape : "vertical";
         const aspect = mediaShape === "landscape" ? "16 / 9" : (mediaShape === "square" ? "1 / 1" : "9 / 16");
+        const autoThumbnailUrl = spotlightThumbnailProxyUrl(spotlightUrl);
         const spotlightImage = liveSpotlightImageData
             ? `<div class="spotlight-image-wrap spotlight-shape-${{mediaShape}}" style="aspect-ratio:${{aspect}};"><img src="data:image/png;base64,${{liveSpotlightImageData}}" alt="Featured Spotlight">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>`
-            : "";
+            : (autoThumbnailUrl ? `<div class="spotlight-image-wrap spotlight-shape-${{mediaShape}}" style="aspect-ratio:${{aspect}};"><img src="${{escapeHtml(autoThumbnailUrl)}}" alt="Featured Spotlight" onerror="this.closest('.spotlight-image-wrap').style.display='none';">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>` : "");
         const spotlightSubtextHtml = (spotlightSubtext || "").trim()
             ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
             : "";
