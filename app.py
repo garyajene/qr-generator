@@ -2877,12 +2877,18 @@ def _spotlight_aspect_style(shape):
 
 
 def _spotlight_embed_url(value):
+    """
+    Convert normal social/video links into iframe-friendly embed URLs.
+    Return an empty string when the platform/link is not safely embeddable so
+    the public page can fall back to opening the original URL instead of showing
+    a broken iframe.
+    """
     url = _safe_url(value)
     if not url:
         return ""
     try:
         parsed = urllib.parse.urlparse(url)
-        host = (parsed.netloc or "").lower()
+        host = (parsed.netloc or "").lower().replace("www.", "")
         path = parsed.path or ""
         query = urllib.parse.parse_qs(parsed.query or "")
 
@@ -2902,14 +2908,53 @@ def _spotlight_embed_url(value):
             if video_id:
                 return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1&playsinline=1"
 
+        if "tiktok.com" in host:
+            parts = [part for part in path.split("/") if part]
+            video_id = ""
+            if "video" in parts:
+                idx = parts.index("video")
+                if idx + 1 < len(parts):
+                    video_id = parts[idx + 1]
+            elif path.startswith("/embed/v2/"):
+                video_id = path.split("/embed/v2/", 1)[1].split("/")[0]
+            if video_id and video_id.isdigit():
+                return "https://www.tiktok.com/embed/v2/" + urllib.parse.quote(video_id, safe="")
+
+        if "instagram.com" in host:
+            parts = [part for part in path.split("/") if part]
+            if len(parts) >= 2 and parts[0] in {"p", "reel", "tv"}:
+                shortcode = parts[1]
+                if shortcode:
+                    return "https://www.instagram.com/" + parts[0] + "/" + urllib.parse.quote(shortcode, safe="") + "/embed/"
+
         if "vimeo.com" in host:
             video_id = path.strip("/").split("/")[-1]
             if video_id.isdigit():
                 return "https://player.vimeo.com/video/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1"
 
-        return url
+        if "loom.com" in host:
+            parts = [part for part in path.split("/") if part]
+            if "share" in parts:
+                idx = parts.index("share")
+                if idx + 1 < len(parts):
+                    return "https://www.loom.com/embed/" + urllib.parse.quote(parts[idx + 1], safe="")
+            if "embed" in parts:
+                idx = parts.index("embed")
+                if idx + 1 < len(parts):
+                    return "https://www.loom.com/embed/" + urllib.parse.quote(parts[idx + 1], safe="")
+
+        if "wistia.com" in host or "wi.st" in host:
+            parts = [part for part in path.split("/") if part]
+            media_id = parts[-1] if parts else ""
+            if media_id:
+                return "https://fast.wistia.net/embed/iframe/" + urllib.parse.quote(media_id, safe="")
+
+        if "facebook.com" in host or "fb.watch" in host:
+            return "https://www.facebook.com/plugins/video.php?href=" + urllib.parse.quote(url, safe="") + "&show_text=false&width=500"
+
+        return ""
     except Exception:
-        return url
+        return ""
 
 
 def _get_profile(username="test"):
@@ -3525,19 +3570,22 @@ def buttn_public_profile(username):
             safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
             if safe_spotlight_url and spotlight_behavior == "play_page":
                 embed_url = _spotlight_embed_url(safe_spotlight_url)
-                spotlight_html = f'<button type="button" class="spotlight-card spotlight-button" onclick="openSpotlightPlayer()">{spotlight_inner}</button>'
-                spotlight_player_modal_html = f"""
-                <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true">
-                  <div class="spotlight-modal-backdrop" onclick="closeSpotlightPlayer()"></div>
-                  <div class="spotlight-modal-card spotlight-modal-{html.escape(spotlight_shape)}">
-                    <button type="button" class="spotlight-modal-close" onclick="closeSpotlightPlayer()">×</button>
-                    <div class="spotlight-player-frame" style="aspect-ratio:{html.escape(spotlight_aspect)};">
-                      <iframe id="spotlight_player_iframe" data-src="{html.escape(embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                if embed_url:
+                    spotlight_html = f'<button type="button" class="spotlight-card spotlight-button" onclick="openSpotlightPlayer()">{spotlight_inner}</button>'
+                    spotlight_player_modal_html = f"""
+                    <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true">
+                      <div class="spotlight-modal-backdrop" onclick="closeSpotlightPlayer()"></div>
+                      <div class="spotlight-modal-card spotlight-modal-{html.escape(spotlight_shape)}">
+                        <button type="button" class="spotlight-modal-close" onclick="closeSpotlightPlayer()">×</button>
+                        <div class="spotlight-player-frame" style="aspect-ratio:{html.escape(spotlight_aspect)};">
+                          <iframe id="spotlight_player_iframe" data-src="{html.escape(embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                        </div>
+                        <a class="spotlight-open-original" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>
+                      </div>
                     </div>
-                    <a class="spotlight-open-original" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>
-                  </div>
-                </div>
-                """
+                    """
+                else:
+                    spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
             elif safe_spotlight_url and spotlight_behavior == "same_page":
                 spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
             elif safe_spotlight_url:
