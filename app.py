@@ -208,6 +208,11 @@ def init_database():
         """))
 
         conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_autoplay BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profile_leads (
                 id SERIAL PRIMARY KEY,
                 profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -2430,6 +2435,7 @@ def _save_db_profile(username, profile, user_id):
         save_data["lead_capture_enabled"] = bool(save_data.get("lead_capture_enabled"))
         save_data["spotlight_enabled"] = bool(save_data.get("spotlight_enabled"))
         save_data["spotlight_show_play"] = bool(save_data.get("spotlight_show_play"))
+        save_data["spotlight_autoplay"] = bool(save_data.get("spotlight_autoplay"))
         save_data["spotlight_open_behavior"] = _normalize_spotlight_open_behavior(save_data.get("spotlight_open_behavior"))
         save_data["spotlight_media_shape"] = _normalize_spotlight_media_shape(save_data.get("spotlight_media_shape"))
         with engine.begin() as conn:
@@ -2455,14 +2461,15 @@ def _save_db_profile(username, profile, user_id):
                         spotlight_headline=:spotlight_headline, spotlight_subtext=:spotlight_subtext,
                         spotlight_url=:spotlight_url, spotlight_show_play=:spotlight_show_play,
                         spotlight_open_behavior=:spotlight_open_behavior, spotlight_media_shape=:spotlight_media_shape,
+                        spotlight_autoplay=:spotlight_autoplay,
                         updated_at=NOW()
                     WHERE id=:profile_id
                 """), {**save_data, "profile_id": profile_id})
                 conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
             else:
                 profile_id = conn.execute(text("""
-                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play, spotlight_open_behavior, spotlight_media_shape)
-                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play, :spotlight_open_behavior, :spotlight_media_shape)
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play, spotlight_open_behavior, spotlight_media_shape, spotlight_autoplay)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play, :spotlight_open_behavior, :spotlight_media_shape, :spotlight_autoplay)
                     RETURNING id
                 """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
             for idx, item in enumerate(profile.get("links", [])):
@@ -2514,6 +2521,7 @@ def account_create_profile():
     profile["spotlight_subtext"] = ""
     profile["spotlight_url"] = ""
     profile["spotlight_show_play"] = False
+    profile["spotlight_autoplay"] = False
     profile["spotlight_open_behavior"] = "new_tab"
     profile["spotlight_media_shape"] = "vertical"
     _save_db_profile(username, profile, user_id)
@@ -2618,6 +2626,7 @@ BUTTN_PROFILES = {
         "spotlight_subtext": "",
         "spotlight_url": "",
         "spotlight_show_play": False,
+        "spotlight_autoplay": False,
         "spotlight_open_behavior": "new_tab",
         "spotlight_media_shape": "vertical",
         "links": [
@@ -2877,7 +2886,7 @@ def _spotlight_aspect_style(shape):
     return "9 / 16"
 
 
-def _spotlight_embed_url(value):
+def _spotlight_embed_url(value, autoplay=True, muted=False):
     """
     Convert normal social/video links into iframe-friendly embed URLs.
     Return an empty string when the platform/link is not safely embeddable so
@@ -2887,6 +2896,17 @@ def _spotlight_embed_url(value):
     url = _safe_url(value)
     if not url:
         return ""
+
+    autoplay = bool(autoplay)
+    muted = bool(muted)
+
+    def _query_string(params):
+        clean = []
+        for key, val in params:
+            if val is not None and val != "":
+                clean.append((key, str(val)))
+        return urllib.parse.urlencode(clean)
+
     try:
         parsed = urllib.parse.urlparse(url)
         host = (parsed.netloc or "").lower().replace("www.", "")
@@ -2902,12 +2922,12 @@ def _spotlight_embed_url(value):
             elif path.startswith("/embed/"):
                 video_id = path.split("/embed/", 1)[1].split("/")[0]
             if video_id:
-                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1&playsinline=1"
+                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?" + _query_string([("autoplay", 1 if autoplay else 0), ("mute", 1 if muted else 0), ("playsinline", 1)])
 
         if "youtu.be" in host:
             video_id = path.strip("/").split("/")[0]
             if video_id:
-                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1&playsinline=1"
+                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?" + _query_string([("autoplay", 1 if autoplay else 0), ("mute", 1 if muted else 0), ("playsinline", 1)])
 
         if "tiktok.com" in host:
             parts = [part for part in path.split("/") if part]
@@ -2931,7 +2951,7 @@ def _spotlight_embed_url(value):
         if "vimeo.com" in host:
             video_id = path.strip("/").split("/")[-1]
             if video_id.isdigit():
-                return "https://player.vimeo.com/video/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1"
+                return "https://player.vimeo.com/video/" + urllib.parse.quote(video_id, safe="") + "?" + _query_string([("autoplay", 1 if autoplay else 0), ("muted", 1 if muted else 0), ("playsinline", 1)])
 
         if "loom.com" in host:
             parts = [part for part in path.split("/") if part]
@@ -3716,6 +3736,7 @@ def buttn_public_profile(username):
         spotlight_image_b64 = (profile.get("spotlight_image_b64") or "").strip()
         spotlight_url_raw = (profile.get("spotlight_url") or "").strip()
         spotlight_behavior = _normalize_spotlight_open_behavior(profile.get("spotlight_open_behavior"))
+        spotlight_autoplay = bool(profile.get("spotlight_autoplay"))
         spotlight_shape = _normalize_spotlight_media_shape(profile.get("spotlight_media_shape"))
         spotlight_aspect = _spotlight_aspect_style(spotlight_shape)
         if spotlight_headline_raw or spotlight_image_b64 or spotlight_url_raw:
@@ -3732,11 +3753,11 @@ def buttn_public_profile(username):
                 spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="{html.escape(spotlight_auto_thumb)}" alt="Featured Spotlight">{play_html}</div>'
             spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
             if safe_spotlight_url and spotlight_behavior == "play_page":
-                embed_url = _spotlight_embed_url(safe_spotlight_url)
+                embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=True, muted=spotlight_autoplay)
                 if embed_url:
                     spotlight_html = f'<button type="button" class="spotlight-card spotlight-button" onclick="openSpotlightPlayer()">{spotlight_inner}</button>'
                     spotlight_player_modal_html = f"""
-                    <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true">
+                    <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true" data-autoplay="{'1' if spotlight_autoplay else '0'}">
                       <div class="spotlight-modal-backdrop" onclick="closeSpotlightPlayer()"></div>
                       <div class="spotlight-modal-card spotlight-modal-{html.escape(spotlight_shape)}">
                         <button type="button" class="spotlight-modal-close" onclick="closeSpotlightPlayer()">×</button>
@@ -3876,6 +3897,12 @@ function closeSpotlightPlayer() {{
         modal.setAttribute("aria-hidden", "true");
     }}
 }}
+window.addEventListener("load", function() {{
+    const modal = document.getElementById("spotlight_player_modal");
+    if (modal && modal.getAttribute("data-autoplay") === "1") {{
+        window.setTimeout(openSpotlightPlayer, 450);
+    }}
+}});
 </script>
 </body>
 </html>
@@ -4083,6 +4110,7 @@ def buttn_edit_profile(username):
         profile["spotlight_subtext"] = (request.form.get("spotlight_subtext") or "").strip()[:240]
         profile["spotlight_url"] = (request.form.get("spotlight_url") or "").strip()[:500]
         profile["spotlight_show_play"] = (request.form.get("spotlight_show_play") == "on")
+        profile["spotlight_autoplay"] = (request.form.get("spotlight_autoplay") == "on")
         profile["spotlight_open_behavior"] = _normalize_spotlight_open_behavior(request.form.get("spotlight_open_behavior") or profile.get("spotlight_open_behavior"))
         profile["spotlight_media_shape"] = _normalize_spotlight_media_shape(request.form.get("spotlight_media_shape") or profile.get("spotlight_media_shape"))
         try:
@@ -4262,7 +4290,8 @@ input[type="range"] {{ width:100%; }}
           </select>
         </div>
         <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
-        <div class="small-help">Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play on Page keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
+        <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Spotlight on Profile Visit</label>
+        <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play on Page keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
@@ -4394,6 +4423,7 @@ function renderLivePreview() {{
     const spotlightSubtext = getVal("spotlight_subtext_input", "");
     const spotlightUrl = getVal("spotlight_url_input", "");
     const spotlightShowPlay = !!(getEl("spotlight_show_play_input") && getEl("spotlight_show_play_input").checked);
+    const spotlightAutoplay = !!(getEl("spotlight_autoplay_input") && getEl("spotlight_autoplay_input").checked);
     const spotlightMediaShape = getVal("spotlight_media_shape_input", "vertical");
     const spotlightOpenBehavior = getVal("spotlight_open_behavior_input", "new_tab");
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
@@ -4423,7 +4453,8 @@ function renderLivePreview() {{
             ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
             : "";
         const behaviorLabel = spotlightOpenBehavior === "play_page" ? "Play on page" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab");
-        const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured • ${{behaviorLabel}}</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
+        const autoplayLabel = spotlightAutoplay ? " • Autoplay" : "";
+        const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured • ${{behaviorLabel}}${{autoplayLabel}}</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
         const href = safeUrl(spotlightUrl);
         spotlightHtml = href
             ? `<a class="spotlight-card" href="${{escapeHtml(href)}}" target="${{spotlightOpenBehavior === "same_page" ? "_self" : "_blank"}}" rel="noopener">${{spotlightInner}}</a>`
@@ -4507,6 +4538,10 @@ if (spotlightEnabledInput) {{
 const spotlightPlayInput = getEl("spotlight_show_play_input");
 if (spotlightPlayInput) {{
     spotlightPlayInput.addEventListener("change", renderLivePreview);
+}}
+const spotlightAutoplayInput = getEl("spotlight_autoplay_input");
+if (spotlightAutoplayInput) {{
+    spotlightAutoplayInput.addEventListener("change", renderLivePreview);
 }}
 const spotlightMediaShapeInput = getEl("spotlight_media_shape_input");
 if (spotlightMediaShapeInput) {{
