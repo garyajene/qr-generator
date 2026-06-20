@@ -150,6 +150,31 @@ def init_database():
             )
         """))
 
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS lead_capture_enabled BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS lead_capture_headline TEXT DEFAULT 'Stay Connected'
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS lead_capture_button_text TEXT DEFAULT 'Submit'
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS profile_leads (
+                id SERIAL PRIMARY KEY,
+                profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                name TEXT DEFAULT '',
+                email TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
     _db_initialized = True
 
 
@@ -2111,6 +2136,7 @@ def _dashboard_page(message="", url_message=""):
                 <a href="/buttn/edit/{username}">Edit</a>
                 <a href="/{username}" target="_blank">View</a>
                 <a href="/account/analytics/{username}">Analytics</a>
+                <a href="/account/leads/{username}">Leads ({_get_profile_lead_count(username_raw)})</a>
             </div>
         </div>
         """
@@ -2351,8 +2377,9 @@ def _save_db_profile(username, profile, user_id):
     try:
         init_database()
         save_data = dict(profile)
-        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color"]:
+        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text"]:
             save_data.setdefault(key, "")
+        save_data["lead_capture_enabled"] = bool(save_data.get("lead_capture_enabled"))
         with engine.begin() as conn:
             existing = conn.execute(text("SELECT id, user_id FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
             if existing and existing["user_id"] != user_id:
@@ -2369,14 +2396,16 @@ def _save_db_profile(username, profile, user_id):
                         header_bg_color=:header_bg_color, header_image_opacity=:header_image_opacity, page_bg_color=:page_bg_color,
                         link_bg_color=:link_bg_color, link_text_color=:link_text_color, link_border_color=:link_border_color,
                         header_name_color=:header_name_color, header_title_color=:header_title_color, action_bg_color=:action_bg_color,
-                        action_text_color=:action_text_color, action_border_color=:action_border_color, updated_at=NOW()
+                        action_text_color=:action_text_color, action_border_color=:action_border_color,
+                        lead_capture_enabled=:lead_capture_enabled, lead_capture_headline=:lead_capture_headline,
+                        lead_capture_button_text=:lead_capture_button_text, updated_at=NOW()
                     WHERE id=:profile_id
                 """), {**save_data, "profile_id": profile_id})
                 conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
             else:
                 profile_id = conn.execute(text("""
-                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color)
-                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color)
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text)
                     RETURNING id
                 """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
             for idx, item in enumerate(profile.get("links", [])):
@@ -2419,6 +2448,9 @@ def account_create_profile():
     profile["buttn_url"] = username
     profile["name"] = profile_name
     profile["title"] = ""
+    profile["lead_capture_enabled"] = False
+    profile["lead_capture_headline"] = "Stay Connected"
+    profile["lead_capture_button_text"] = "Submit"
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
 
@@ -2512,6 +2544,9 @@ BUTTN_PROFILES = {
         "action_bg_color": "#ffffff",
         "action_text_color": "#111111",
         "action_border_color": "#d8dde6",
+        "lead_capture_enabled": False,
+        "lead_capture_headline": "Stay Connected",
+        "lead_capture_button_text": "Submit",
         "links": [
             {"icon": "store", "label": "Button Text", "url": ""},
             {"icon": "youtube", "label": "", "url": ""},
@@ -2808,6 +2843,57 @@ def _record_link_click(username, link_label, link_url):
         pass
 
 
+
+
+
+def _record_lead(username, lead_name, lead_email):
+    profile_id = _db_profile_id(username)
+    lead_name = (lead_name or "").strip()[:120]
+    lead_email = (lead_email or "").strip().lower()[:240]
+    if not profile_id or engine is None or not lead_email or "@" not in lead_email:
+        return False
+    try:
+        init_database()
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO profile_leads (profile_id, name, email)
+                VALUES (:profile_id, :name, :email)
+            """), {"profile_id": profile_id, "name": lead_name, "email": lead_email})
+        return True
+    except Exception:
+        return False
+
+
+def _get_profile_lead_count(username):
+    profile_id = _db_profile_id(username)
+    if not profile_id or engine is None:
+        return 0
+    try:
+        init_database()
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM profile_leads WHERE profile_id = :profile_id"), {"profile_id": profile_id}).scalar()
+        return int(count or 0)
+    except Exception:
+        return 0
+
+
+def _get_profile_leads(username, limit=200):
+    profile_id = _db_profile_id(username)
+    if not profile_id or engine is None:
+        return []
+    try:
+        init_database()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT name, email, to_char(created_at, 'Mon DD, YYYY HH12:MI AM') AS created_label
+                FROM profile_leads
+                WHERE profile_id = :profile_id
+                ORDER BY created_at DESC, id DESC
+                LIMIT :limit
+            """), {"profile_id": profile_id, "limit": int(limit)}).mappings().all()
+        return [dict(row) for row in rows]
+    except Exception:
+        return []
 
 def _get_profile_analytics(username):
     profile_id = _db_profile_id(username)
@@ -3290,6 +3376,21 @@ def buttn_public_profile(username):
     if not links_html:
         links_html = '<div class="empty-note">No links have been added yet.</div>'
 
+    lead_capture_html = ""
+    if profile.get("lead_capture_enabled"):
+        lead_headline = html.escape(profile.get("lead_capture_headline") or "Stay Connected")
+        lead_button_text = html.escape(profile.get("lead_capture_button_text") or "Submit")
+        lead_capture_html = f"""
+        <div class="lead-capture-card">
+          <h2>{lead_headline}</h2>
+          <form method="post" action="/buttn/lead/{html.escape(_normalize_buttn_url(username))}">
+            <input type="text" name="lead_name" placeholder="Your name">
+            <input type="email" name="lead_email" placeholder="Your email" required>
+            <button type="submit">{lead_button_text}</button>
+          </form>
+        </div>
+        """
+
     return f"""
 <!doctype html>
 <html>
@@ -3317,6 +3418,10 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}\n.buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
+.lead-capture-card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:18px; margin-top:18px; box-shadow:0 8px 18px rgba(0,0,0,0.04); }}
+.lead-capture-card h2 {{ margin:0 0 12px; font-size:20px; text-align:center; }}
+.lead-capture-card input {{ width:100%; box-sizing:border-box; padding:13px; border:1px solid #cfd5df; border-radius:12px; font-size:15px; margin-bottom:10px; }}
+.lead-capture-card button {{ width:100%; border:none; border-radius:14px; padding:14px; background:#111; color:#fff; font-size:16px; font-weight:900; cursor:pointer; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
 {_app_nav_css()}
 </style>
@@ -3334,7 +3439,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
       <div class="actions">{action_buttons}</div>
     </div>
   </div>
-  <div class="links-area">{links_html}</div>
+  <div class="links-area">{links_html}{lead_capture_html}</div>
   <div class="buttn-footer">Powered by BUTTN</div>
 </div>
 </body>
@@ -3367,6 +3472,82 @@ def buttn_track_link_click(username, link_index):
     _record_link_click(username, label, final_url)
     return redirect(final_url)
 
+
+
+
+@app.route("/buttn/lead/<username>", methods=["POST"])
+def buttn_submit_lead(username):
+    username = _normalize_buttn_url(username)
+    profile = _get_profile(username)
+    if not profile or not profile.get("lead_capture_enabled"):
+        return redirect(f"/{username}")
+    lead_name = (request.form.get("lead_name") or "").strip()
+    lead_email = (request.form.get("lead_email") or "").strip()
+    _record_lead(username, lead_name, lead_email)
+    return redirect(f"/{username}?lead=thanks")
+
+
+@app.route("/account/leads/<username>")
+def account_profile_leads(username):
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+
+    username = _normalize_buttn_url(username)
+    owner_id = _db_profile_owner_id(username)
+    if not owner_id or owner_id != user_id:
+        return redirect("/account")
+
+    profile = _get_profile(username)
+    rows = _get_profile_leads(username)
+    safe_username = html.escape(username)
+    safe_name = html.escape(profile.get("name") or _display_name_from_username(username) or username)
+
+    lead_rows = ""
+    for row in rows:
+        lead_name = html.escape(row.get("name") or "No name")
+        lead_email = html.escape(row.get("email") or "")
+        created_label = html.escape(row.get("created_label") or "")
+        lead_rows += f"""
+        <div class="lead-row">
+            <div><strong>{lead_name}</strong><br><a href="mailto:{lead_email}">{lead_email}</a></div>
+            <div class="lead-date">{created_label}</div>
+        </div>
+        """
+
+    if not lead_rows:
+        lead_rows = '<p class="empty">No leads captured yet.</p>'
+
+    return f"""
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leads | BUTTN</title>
+<style>
+body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
+.wrap {{ max-width:760px; margin:40px auto; padding:20px; }}
+.card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
+h1 {{ margin:0 0 6px; }} .muted, .empty {{ color:#666; }}
+.lead-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }}
+.lead-row:first-child {{ border-top:none; }}
+.lead-date {{ color:#666; font-size:13px; text-align:right; }}
+a {{ color:#111; font-weight:800; }}
+{_app_nav_css()}
+@media (max-width:640px) {{ .lead-row {{ align-items:flex-start; flex-direction:column; }} .lead-date {{ text-align:left; }} }}
+</style></head>
+<body>{_app_nav_html(username)}
+<div class="wrap">
+  <div class="card">
+    <h1>Leads</h1>
+    <div class="muted">{safe_name} /{safe_username}</div>
+    <p><a href="/account">Back to Account</a> &nbsp; <a href="/buttn/edit/{safe_username}">Edit Profile</a> &nbsp; <a href="/{safe_username}" target="_blank">View Profile</a></p>
+  </div>
+  <div class="card">
+    <h2>Captured Leads ({len(rows)})</h2>
+    {lead_rows}
+  </div>
+</div>
+</body></html>
+"""
 
 @app.route("/<username>")
 def buttn_public_profile_root(username):
@@ -3419,6 +3600,9 @@ def buttn_edit_profile(username):
         profile["action_bg_color"] = _clean_hex(request.form.get("action_bg_color"), "#ffffff")
         profile["action_text_color"] = _clean_hex(request.form.get("action_text_color"), "#111111")
         profile["action_border_color"] = _clean_hex(request.form.get("action_border_color"), "#d8dde6")
+        profile["lead_capture_enabled"] = (request.form.get("lead_capture_enabled") == "on")
+        profile["lead_capture_headline"] = (request.form.get("lead_capture_headline") or "Stay Connected").strip()[:120]
+        profile["lead_capture_button_text"] = (request.form.get("lead_capture_button_text") or "Submit").strip()[:60]
         try:
             profile["header_image_opacity"] = str(max(0, min(100, int(request.form.get("header_image_opacity") or 35))))
         except ValueError:
@@ -3512,6 +3696,8 @@ input[type="range"] {{ width:100%; }}
 .preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
 .preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
+.toggle-row {{ display:flex; align-items:center; gap:10px; font-weight:800; margin-bottom:14px; }}
+.toggle-row input {{ width:auto; }}
 {_app_nav_css()}
 @media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} }}
 </style>
@@ -3547,6 +3733,13 @@ input[type="range"] {{ width:100%; }}
           {link_inputs}
         </div>
         <button type="button" id="add_link_btn" class="add-link-btn">+ Add Link</button>
+      </div>
+      <div class="panel">
+        <h2>Lead Capture</h2>
+        <label class="toggle-row"><input id="lead_capture_enabled_input" type="checkbox" name="lead_capture_enabled" {'checked' if profile.get('lead_capture_enabled') else ''}> Enable Lead Capture</label>
+        <div class="field"><label>Headline</label><input id="lead_capture_headline_input" type="text" name="lead_capture_headline" value="{val('lead_capture_headline', 'Stay Connected')}" placeholder="Stay Connected"></div>
+        <div class="field"><label>Button Text</label><input id="lead_capture_button_text_input" type="text" name="lead_capture_button_text" value="{val('lead_capture_button_text', 'Submit')}" placeholder="Submit"></div>
+        <div class="small-help">When enabled, visitors can leave their name and email on this profile. No email sending or SMTP needed.</div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
