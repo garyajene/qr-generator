@@ -197,6 +197,16 @@ def init_database():
         """))
 
         conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_open_behavior TEXT DEFAULT 'new_tab'
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_media_shape TEXT DEFAULT 'vertical'
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profile_leads (
                 id SERIAL PRIMARY KEY,
                 profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -2414,11 +2424,13 @@ def _save_db_profile(username, profile, user_id):
     try:
         init_database()
         save_data = dict(profile)
-        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text", "spotlight_image_b64", "spotlight_headline", "spotlight_subtext", "spotlight_url"]:
+        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text", "spotlight_image_b64", "spotlight_headline", "spotlight_subtext", "spotlight_url", "spotlight_open_behavior", "spotlight_media_shape"]:
             save_data.setdefault(key, "")
         save_data["lead_capture_enabled"] = bool(save_data.get("lead_capture_enabled"))
         save_data["spotlight_enabled"] = bool(save_data.get("spotlight_enabled"))
         save_data["spotlight_show_play"] = bool(save_data.get("spotlight_show_play"))
+        save_data["spotlight_open_behavior"] = _normalize_spotlight_open_behavior(save_data.get("spotlight_open_behavior"))
+        save_data["spotlight_media_shape"] = _normalize_spotlight_media_shape(save_data.get("spotlight_media_shape"))
         with engine.begin() as conn:
             existing = conn.execute(text("SELECT id, user_id FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
             if existing and existing["user_id"] != user_id:
@@ -2441,14 +2453,15 @@ def _save_db_profile(username, profile, user_id):
                         spotlight_enabled=:spotlight_enabled, spotlight_image_b64=:spotlight_image_b64,
                         spotlight_headline=:spotlight_headline, spotlight_subtext=:spotlight_subtext,
                         spotlight_url=:spotlight_url, spotlight_show_play=:spotlight_show_play,
+                        spotlight_open_behavior=:spotlight_open_behavior, spotlight_media_shape=:spotlight_media_shape,
                         updated_at=NOW()
                     WHERE id=:profile_id
                 """), {**save_data, "profile_id": profile_id})
                 conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
             else:
                 profile_id = conn.execute(text("""
-                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play)
-                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play)
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play, spotlight_open_behavior, spotlight_media_shape)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play, :spotlight_open_behavior, :spotlight_media_shape)
                     RETURNING id
                 """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
             for idx, item in enumerate(profile.get("links", [])):
@@ -2500,6 +2513,8 @@ def account_create_profile():
     profile["spotlight_subtext"] = ""
     profile["spotlight_url"] = ""
     profile["spotlight_show_play"] = False
+    profile["spotlight_open_behavior"] = "new_tab"
+    profile["spotlight_media_shape"] = "vertical"
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
 
@@ -2602,6 +2617,8 @@ BUTTN_PROFILES = {
         "spotlight_subtext": "",
         "spotlight_url": "",
         "spotlight_show_play": False,
+        "spotlight_open_behavior": "new_tab",
+        "spotlight_media_shape": "vertical",
         "links": [
             {"icon": "store", "label": "Button Text", "url": ""},
             {"icon": "youtube", "label": "", "url": ""},
@@ -2838,6 +2855,61 @@ def _safe_url(value):
     if value.startswith("http://") or value.startswith("https://") or value.startswith("mailto:") or value.startswith("tel:"):
         return value
     return "https://" + value
+
+
+def _normalize_spotlight_open_behavior(value):
+    value = (value or "new_tab").strip().lower()
+    return value if value in {"new_tab", "same_page", "play_page"} else "new_tab"
+
+
+def _normalize_spotlight_media_shape(value):
+    value = (value or "vertical").strip().lower()
+    return value if value in {"vertical", "landscape", "square"} else "vertical"
+
+
+def _spotlight_aspect_style(shape):
+    shape = _normalize_spotlight_media_shape(shape)
+    if shape == "landscape":
+        return "16 / 9"
+    if shape == "square":
+        return "1 / 1"
+    return "9 / 16"
+
+
+def _spotlight_embed_url(value):
+    url = _safe_url(value)
+    if not url:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.netloc or "").lower()
+        path = parsed.path or ""
+        query = urllib.parse.parse_qs(parsed.query or "")
+
+        if "youtube.com" in host:
+            video_id = ""
+            if path.startswith("/shorts/"):
+                video_id = path.split("/shorts/", 1)[1].split("/")[0]
+            elif path.startswith("/watch"):
+                video_id = (query.get("v") or [""])[0]
+            elif path.startswith("/embed/"):
+                video_id = path.split("/embed/", 1)[1].split("/")[0]
+            if video_id:
+                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1&playsinline=1"
+
+        if "youtu.be" in host:
+            video_id = path.strip("/").split("/")[0]
+            if video_id:
+                return "https://www.youtube.com/embed/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1&playsinline=1"
+
+        if "vimeo.com" in host:
+            video_id = path.strip("/").split("/")[-1]
+            if video_id.isdigit():
+                return "https://player.vimeo.com/video/" + urllib.parse.quote(video_id, safe="") + "?autoplay=1"
+
+        return url
+    except Exception:
+        return url
 
 
 def _get_profile(username="test"):
@@ -3433,10 +3505,14 @@ def buttn_public_profile(username):
         links_html = '<div class="empty-note">No links have been added yet.</div>'
 
     spotlight_html = ""
+    spotlight_player_modal_html = ""
     if profile.get("spotlight_enabled"):
         spotlight_headline_raw = (profile.get("spotlight_headline") or "").strip()
         spotlight_image_b64 = (profile.get("spotlight_image_b64") or "").strip()
         spotlight_url_raw = (profile.get("spotlight_url") or "").strip()
+        spotlight_behavior = _normalize_spotlight_open_behavior(profile.get("spotlight_open_behavior"))
+        spotlight_shape = _normalize_spotlight_media_shape(profile.get("spotlight_media_shape"))
+        spotlight_aspect = _spotlight_aspect_style(spotlight_shape)
         if spotlight_headline_raw or spotlight_image_b64:
             spotlight_headline = html.escape(spotlight_headline_raw or "Featured")
             spotlight_subtext = html.escape((profile.get("spotlight_subtext") or "").strip())
@@ -3444,10 +3520,27 @@ def buttn_public_profile(username):
             spotlight_image_html = ""
             if spotlight_image_b64:
                 play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
-                spotlight_image_html = f'<div class="spotlight-image-wrap"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
+                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
             spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
             safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
-            if safe_spotlight_url:
+            if safe_spotlight_url and spotlight_behavior == "play_page":
+                embed_url = _spotlight_embed_url(safe_spotlight_url)
+                spotlight_html = f'<button type="button" class="spotlight-card spotlight-button" onclick="openSpotlightPlayer()">{spotlight_inner}</button>'
+                spotlight_player_modal_html = f"""
+                <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true">
+                  <div class="spotlight-modal-backdrop" onclick="closeSpotlightPlayer()"></div>
+                  <div class="spotlight-modal-card spotlight-modal-{html.escape(spotlight_shape)}">
+                    <button type="button" class="spotlight-modal-close" onclick="closeSpotlightPlayer()">×</button>
+                    <div class="spotlight-player-frame" style="aspect-ratio:{html.escape(spotlight_aspect)};">
+                      <iframe id="spotlight_player_iframe" data-src="{html.escape(embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                    </div>
+                    <a class="spotlight-open-original" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>
+                  </div>
+                </div>
+                """
+            elif safe_spotlight_url and spotlight_behavior == "same_page":
+                spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
+            elif safe_spotlight_url:
                 spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
             else:
                 spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
@@ -3504,11 +3597,24 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}\n.buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
-.spotlight-card {{ display:block; text-decoration:none; color:#111; background:#fff; border:1px solid #dde1e7; border-radius:20px; overflow:hidden; margin-bottom:18px; box-shadow:0 10px 24px rgba(0,0,0,0.08); }}
-.spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:1.65/1; overflow:hidden; }}
+.spotlight-card {{ display:block; width:100%; text-align:left; text-decoration:none; color:#111; background:#fff; border:1px solid #dde1e7; border-radius:20px; overflow:hidden; margin-bottom:18px; box-shadow:0 10px 24px rgba(0,0,0,0.08); padding:0; font-family:Arial,sans-serif; cursor:pointer; }}
+.spotlight-button {{ appearance:none; -webkit-appearance:none; }}
+.spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:9/16; overflow:hidden; }}
+.spotlight-shape-landscape {{ aspect-ratio:16/9; }}
+.spotlight-shape-square {{ aspect-ratio:1/1; }}
+.spotlight-shape-vertical {{ aspect-ratio:9/16; }}
 .spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
 .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
 .spotlight-copy {{ padding:16px; }}
+.spotlight-modal {{ display:none; position:fixed; inset:0; z-index:99999; align-items:center; justify-content:center; padding:18px; }}
+.spotlight-modal.show {{ display:flex; }}
+.spotlight-modal-backdrop {{ position:absolute; inset:0; background:rgba(0,0,0,0.72); }}
+.spotlight-modal-card {{ position:relative; z-index:2; width:min(92vw,430px); background:#111; border-radius:22px; padding:14px; box-shadow:0 24px 70px rgba(0,0,0,0.45); }}
+.spotlight-modal-landscape {{ width:min(92vw,760px); }}
+.spotlight-player-frame {{ width:100%; background:#000; border-radius:16px; overflow:hidden; }}
+.spotlight-player-frame iframe {{ width:100%; height:100%; border:0; display:block; }}
+.spotlight-modal-close {{ position:absolute; top:-14px; right:-10px; width:38px; height:38px; border:none; border-radius:999px; background:#fff; color:#111; font-size:26px; font-weight:900; line-height:1; cursor:pointer; }}
+.spotlight-open-original {{ display:block; margin-top:12px; color:#fff; text-align:center; font-weight:900; text-decoration:none; }}
 .spotlight-kicker {{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; color:#777; margin-bottom:6px; }}
 .spotlight-copy h2 {{ margin:0; font-size:21px; line-height:1.15; }}
 .spotlight-subtext {{ margin-top:8px; color:#555; font-size:14px; line-height:1.4; }}
@@ -3539,6 +3645,27 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
   <div class="links-area">{spotlight_html}{links_html}{lead_capture_html}</div>
   <div class="buttn-footer">Powered by BUTTN</div>
 </div>
+{spotlight_player_modal_html}
+<script>
+function openSpotlightPlayer() {{
+    const modal = document.getElementById("spotlight_player_modal");
+    const iframe = document.getElementById("spotlight_player_iframe");
+    if (!modal || !iframe) return;
+    const src = iframe.getAttribute("data-src") || "";
+    if (src && !iframe.getAttribute("src")) iframe.setAttribute("src", src);
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+}}
+function closeSpotlightPlayer() {{
+    const modal = document.getElementById("spotlight_player_modal");
+    const iframe = document.getElementById("spotlight_player_iframe");
+    if (iframe) iframe.removeAttribute("src");
+    if (modal) {{
+        modal.classList.remove("show");
+        modal.setAttribute("aria-hidden", "true");
+    }}
+}}
+</script>
 </body>
 </html>
 """
@@ -3745,6 +3872,8 @@ def buttn_edit_profile(username):
         profile["spotlight_subtext"] = (request.form.get("spotlight_subtext") or "").strip()[:240]
         profile["spotlight_url"] = (request.form.get("spotlight_url") or "").strip()[:500]
         profile["spotlight_show_play"] = (request.form.get("spotlight_show_play") == "on")
+        profile["spotlight_open_behavior"] = _normalize_spotlight_open_behavior(request.form.get("spotlight_open_behavior") or profile.get("spotlight_open_behavior"))
+        profile["spotlight_media_shape"] = _normalize_spotlight_media_shape(request.form.get("spotlight_media_shape") or profile.get("spotlight_media_shape"))
         try:
             profile["header_image_opacity"] = str(max(0, min(100, int(request.form.get("header_image_opacity") or 35))))
         except ValueError:
@@ -3762,7 +3891,7 @@ def buttn_edit_profile(username):
 
         spotlight_img = fetch_uploaded_image(request.files.get("spotlight_image_file"))
         if spotlight_img is not None:
-            spotlight_img.thumbnail((1200, 800), Image.LANCZOS)
+            spotlight_img.thumbnail((1200, 1600), Image.LANCZOS)
             profile["spotlight_image_b64"] = image_to_base64(spotlight_img)
 
         links = []
@@ -3830,7 +3959,7 @@ body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; 
 .panel h2 {{ margin:0 0 15px; font-size:19px; }}
 .field {{ margin-bottom:14px; }}
 label {{ display:block; font-weight:700; margin-bottom:7px; }}
-input[type="text"], input[type="email"], input[type="tel"], input[type="color"], input[type="file"] {{ width:100%; padding:11px; border:1px solid #cfd5df; border-radius:10px; font-size:15px; }}
+input[type="text"], input[type="email"], input[type="tel"], input[type="color"], input[type="file"], select {{ width:100%; padding:11px; border:1px solid #cfd5df; border-radius:10px; font-size:15px; background:#fff; }}
 input[type="color"] {{ height:46px; padding:4px; }}
 input[type="range"] {{ width:100%; }}
 .color-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }}
@@ -3895,8 +4024,24 @@ input[type="range"] {{ width:100%; }}
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
         <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
+        <div class="field">
+          <label>Media Shape</label>
+          <select id="spotlight_media_shape_input" name="spotlight_media_shape">
+            <option value="vertical" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'vertical' else ''}>Vertical / Mobile (9:16)</option>
+            <option value="landscape" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'landscape' else ''}>Landscape / Standard Video (16:9)</option>
+            <option value="square" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'square' else ''}>Square (1:1)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Click Behavior</label>
+          <select id="spotlight_open_behavior_input" name="spotlight_open_behavior">
+            <option value="new_tab" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'new_tab' else ''}>Open in New Tab</option>
+            <option value="same_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'same_page' else ''}>Open on Same Page</option>
+            <option value="play_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'play_page' else ''}>Play on Page</option>
+          </select>
+        </div>
         <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
-        <div class="small-help">Use this for product drops, events, music releases, booking pages, YouTube, TikTok, Instagram Reels, or any featured link. No video hosting.</div>
+        <div class="small-help">Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play on Page keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
@@ -4023,6 +4168,8 @@ function renderLivePreview() {{
     const spotlightSubtext = getVal("spotlight_subtext_input", "");
     const spotlightUrl = getVal("spotlight_url_input", "");
     const spotlightShowPlay = !!(getEl("spotlight_show_play_input") && getEl("spotlight_show_play_input").checked);
+    const spotlightMediaShape = getVal("spotlight_media_shape_input", "vertical");
+    const spotlightOpenBehavior = getVal("spotlight_open_behavior_input", "new_tab");
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
@@ -4040,16 +4187,19 @@ function renderLivePreview() {{
 
     let spotlightHtml = "";
     if (spotlightEnabled && ((spotlightHeadline || "").trim() || liveSpotlightImageData)) {{
+        const mediaShape = ["vertical", "landscape", "square"].includes(spotlightMediaShape) ? spotlightMediaShape : "vertical";
+        const aspect = mediaShape === "landscape" ? "16 / 9" : (mediaShape === "square" ? "1 / 1" : "9 / 16");
         const spotlightImage = liveSpotlightImageData
-            ? `<div class="spotlight-image-wrap"><img src="data:image/png;base64,${{liveSpotlightImageData}}" alt="Featured Spotlight">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>`
+            ? `<div class="spotlight-image-wrap spotlight-shape-${{mediaShape}}" style="aspect-ratio:${{aspect}};"><img src="data:image/png;base64,${{liveSpotlightImageData}}" alt="Featured Spotlight">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>`
             : "";
         const spotlightSubtextHtml = (spotlightSubtext || "").trim()
             ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
             : "";
-        const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
+        const behaviorLabel = spotlightOpenBehavior === "play_page" ? "Play on page" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab");
+        const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured • ${{behaviorLabel}}</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
         const href = safeUrl(spotlightUrl);
         spotlightHtml = href
-            ? `<a class="spotlight-card" href="${{escapeHtml(href)}}" target="_blank" rel="noopener">${{spotlightInner}}</a>`
+            ? `<a class="spotlight-card" href="${{escapeHtml(href)}}" target="${{spotlightOpenBehavior === "same_page" ? "_self" : "_blank"}}" rel="noopener">${{spotlightInner}}</a>`
             : `<div class="spotlight-card">${{spotlightInner}}</div>`;
     }}
 
@@ -4074,7 +4224,10 @@ function renderLivePreview() {{
 #live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
 #live_buttn_preview .spotlight-card {{ display:block; text-decoration:none; color:#111; background:#fff; border:1px solid #dde1e7; border-radius:20px; overflow:hidden; margin-bottom:18px; box-shadow:0 10px 24px rgba(0,0,0,0.08); }}
-#live_buttn_preview .spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:1.65/1; overflow:hidden; }}
+#live_buttn_preview .spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:9/16; overflow:hidden; }}
+#live_buttn_preview .spotlight-shape-landscape {{ aspect-ratio:16/9; }}
+#live_buttn_preview .spotlight-shape-square {{ aspect-ratio:1/1; }}
+#live_buttn_preview .spotlight-shape-vertical {{ aspect-ratio:9/16; }}
 #live_buttn_preview .spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
 #live_buttn_preview .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
 #live_buttn_preview .spotlight-copy {{ padding:16px; }}
@@ -4110,7 +4263,8 @@ function renderLivePreview() {{
  "header_name_color_input", "header_title_color_input", "action_bg_color_input",
  "action_text_color_input", "action_border_color_input",
  "lead_capture_headline_input", "lead_capture_button_text_input",
- "spotlight_headline_input", "spotlight_subtext_input", "spotlight_url_input"
+ "spotlight_headline_input", "spotlight_subtext_input", "spotlight_url_input",
+ "spotlight_media_shape_input", "spotlight_open_behavior_input"
 ].forEach(function(id) {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
@@ -4126,6 +4280,14 @@ if (spotlightEnabledInput) {{
 const spotlightPlayInput = getEl("spotlight_show_play_input");
 if (spotlightPlayInput) {{
     spotlightPlayInput.addEventListener("change", renderLivePreview);
+}}
+const spotlightMediaShapeInput = getEl("spotlight_media_shape_input");
+if (spotlightMediaShapeInput) {{
+    spotlightMediaShapeInput.addEventListener("change", renderLivePreview);
+}}
+const spotlightOpenBehaviorInput = getEl("spotlight_open_behavior_input");
+if (spotlightOpenBehaviorInput) {{
+    spotlightOpenBehaviorInput.addEventListener("change", renderLivePreview);
 }}
 function wireLinkEditorEvents() {{
     document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
