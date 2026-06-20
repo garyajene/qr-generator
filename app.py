@@ -3747,35 +3747,46 @@ def buttn_public_profile(username):
             safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
             spotlight_auto_thumb = _spotlight_thumbnail_url(safe_spotlight_url) if safe_spotlight_url else ""
             play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
+
             if spotlight_image_b64:
                 spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
             elif spotlight_auto_thumb:
                 spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="{html.escape(spotlight_auto_thumb)}" alt="Featured Spotlight">{play_html}</div>'
-            spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
+
+            spotlight_copy = f'<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
+
             if safe_spotlight_url and spotlight_behavior == "play_page":
-                embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=True, muted=spotlight_autoplay)
-                if embed_url:
-                    spotlight_html = f'<button type="button" class="spotlight-card spotlight-button" onclick="openSpotlightPlayer()">{spotlight_inner}</button>'
-                    spotlight_player_modal_html = f"""
-                    <div id="spotlight_player_modal" class="spotlight-modal" aria-hidden="true" data-autoplay="{'1' if spotlight_autoplay else '0'}">
-                      <div class="spotlight-modal-backdrop" onclick="closeSpotlightPlayer()"></div>
-                      <div class="spotlight-modal-card spotlight-modal-{html.escape(spotlight_shape)}">
-                        <button type="button" class="spotlight-modal-close" onclick="closeSpotlightPlayer()">×</button>
-                        <div class="spotlight-player-frame" style="aspect-ratio:{html.escape(spotlight_aspect)};">
-                          <iframe id="spotlight_player_iframe" data-src="{html.escape(embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                autoplay_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=spotlight_autoplay, muted=spotlight_autoplay)
+                click_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=True, muted=False)
+                open_original_html = f'<a class="spotlight-open-original-inline" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>'
+
+                if autoplay_embed_url:
+                    if spotlight_autoplay:
+                        spotlight_media_html = f"""
+                        <div class="spotlight-image-wrap spotlight-player-inline spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};">
+                          <iframe src="{html.escape(autoplay_embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
                         </div>
-                        <a class="spotlight-open-original" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>
-                      </div>
-                    </div>
-                    """
+                        """
+                    else:
+                        default_play_html = play_html or '<div class="spotlight-play">▶</div>'
+                        poster_html = spotlight_image_html or f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)} spotlight-empty-media" style="aspect-ratio:{html.escape(spotlight_aspect)};">{default_play_html}</div>'
+                        spotlight_media_html = f"""
+                        <button type="button" class="spotlight-inline-trigger" data-src="{html.escape(click_embed_url)}" data-aspect="{html.escape(spotlight_aspect)}" onclick="loadSpotlightInline(this)" aria-label="Play Featured Spotlight">
+                          {poster_html}
+                        </button>
+                        """
+                    spotlight_html = f'<div class="spotlight-card spotlight-inline-card">{spotlight_media_html}{spotlight_copy}{open_original_html}</div>'
                 else:
+                    spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
                     spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
-            elif safe_spotlight_url and spotlight_behavior == "same_page":
-                spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
-            elif safe_spotlight_url:
-                spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
             else:
-                spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
+                spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
+                if safe_spotlight_url and spotlight_behavior == "same_page":
+                    spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
+                elif safe_spotlight_url:
+                    spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
+                else:
+                    spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
 
     lead_capture_html = ""
     if profile.get("lead_capture_enabled"):
@@ -3836,6 +3847,12 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .spotlight-shape-square {{ aspect-ratio:1/1; }}
 .spotlight-shape-vertical {{ aspect-ratio:9/16; }}
 .spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
+.spotlight-player-inline iframe {{ width:100%; height:100%; border:0; display:block; }}
+.spotlight-inline-trigger {{ display:block; width:100%; border:0; padding:0; margin:0; background:transparent; cursor:pointer; font-family:Arial,sans-serif; }}
+.spotlight-inline-trigger .spotlight-image-wrap {{ pointer-events:none; }}
+.spotlight-inline-card {{ cursor:default; }}
+.spotlight-empty-media {{ display:flex; align-items:center; justify-content:center; min-height:220px; }}
+.spotlight-open-original-inline {{ display:block; padding:0 16px 16px; color:#111; font-size:13px; font-weight:900; text-decoration:none; }}
 .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
 .spotlight-copy {{ padding:16px; }}
 .spotlight-modal {{ display:none; position:fixed; inset:0; z-index:99999; align-items:center; justify-content:center; padding:18px; }}
@@ -3879,30 +3896,17 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 </div>
 {spotlight_player_modal_html}
 <script>
-function openSpotlightPlayer() {{
-    const modal = document.getElementById("spotlight_player_modal");
-    const iframe = document.getElementById("spotlight_player_iframe");
-    if (!modal || !iframe) return;
-    const src = iframe.getAttribute("data-src") || "";
-    if (src && !iframe.getAttribute("src")) iframe.setAttribute("src", src);
-    modal.classList.add("show");
-    modal.setAttribute("aria-hidden", "false");
+function loadSpotlightInline(button) {{
+    if (!button) return;
+    const src = button.getAttribute("data-src") || "";
+    const aspect = button.getAttribute("data-aspect") || "9 / 16";
+    if (!src) return;
+    const frame = document.createElement("div");
+    frame.className = "spotlight-image-wrap spotlight-player-inline";
+    frame.style.aspectRatio = aspect;
+    frame.innerHTML = '<iframe src="' + src.replace(/"/g, "&quot;") + '" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+    button.replaceWith(frame);
 }}
-function closeSpotlightPlayer() {{
-    const modal = document.getElementById("spotlight_player_modal");
-    const iframe = document.getElementById("spotlight_player_iframe");
-    if (iframe) iframe.removeAttribute("src");
-    if (modal) {{
-        modal.classList.remove("show");
-        modal.setAttribute("aria-hidden", "true");
-    }}
-}}
-window.addEventListener("load", function() {{
-    const modal = document.getElementById("spotlight_player_modal");
-    if (modal && modal.getAttribute("data-autoplay") === "1") {{
-        window.setTimeout(openSpotlightPlayer, 450);
-    }}
-}});
 </script>
 </body>
 </html>
@@ -4286,12 +4290,12 @@ input[type="range"] {{ width:100%; }}
           <select id="spotlight_open_behavior_input" name="spotlight_open_behavior">
             <option value="new_tab" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'new_tab' else ''}>Open in New Tab</option>
             <option value="same_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'same_page' else ''}>Open on Same Page</option>
-            <option value="play_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'play_page' else ''}>Play on Page</option>
+            <option value="play_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'play_page' else ''}>Play Inside Spotlight Card</option>
           </select>
         </div>
         <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
-        <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Spotlight on Profile Visit</label>
-        <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play on Page keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
+        <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Inside Spotlight Card</label>
+        <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play Inside Spotlight Card keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
@@ -4452,7 +4456,7 @@ function renderLivePreview() {{
         const spotlightSubtextHtml = (spotlightSubtext || "").trim()
             ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
             : "";
-        const behaviorLabel = spotlightOpenBehavior === "play_page" ? "Play on page" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab");
+        const behaviorLabel = spotlightOpenBehavior === "play_page" ? "Plays in card" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab");
         const autoplayLabel = spotlightAutoplay ? " • Autoplay" : "";
         const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured • ${{behaviorLabel}}${{autoplayLabel}}</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
         const href = safeUrl(spotlightUrl);
