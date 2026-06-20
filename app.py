@@ -167,6 +167,36 @@ def init_database():
         """))
 
         conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_enabled BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_image_b64 TEXT DEFAULT ''
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_headline TEXT DEFAULT ''
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_subtext TEXT DEFAULT ''
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_url TEXT DEFAULT ''
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS spotlight_show_play BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profile_leads (
                 id SERIAL PRIMARY KEY,
                 profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -2384,9 +2414,11 @@ def _save_db_profile(username, profile, user_id):
     try:
         init_database()
         save_data = dict(profile)
-        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text"]:
+        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text", "spotlight_image_b64", "spotlight_headline", "spotlight_subtext", "spotlight_url"]:
             save_data.setdefault(key, "")
         save_data["lead_capture_enabled"] = bool(save_data.get("lead_capture_enabled"))
+        save_data["spotlight_enabled"] = bool(save_data.get("spotlight_enabled"))
+        save_data["spotlight_show_play"] = bool(save_data.get("spotlight_show_play"))
         with engine.begin() as conn:
             existing = conn.execute(text("SELECT id, user_id FROM profiles WHERE username = :username"), {"username": username}).mappings().first()
             if existing and existing["user_id"] != user_id:
@@ -2405,14 +2437,18 @@ def _save_db_profile(username, profile, user_id):
                         header_name_color=:header_name_color, header_title_color=:header_title_color, action_bg_color=:action_bg_color,
                         action_text_color=:action_text_color, action_border_color=:action_border_color,
                         lead_capture_enabled=:lead_capture_enabled, lead_capture_headline=:lead_capture_headline,
-                        lead_capture_button_text=:lead_capture_button_text, updated_at=NOW()
+                        lead_capture_button_text=:lead_capture_button_text,
+                        spotlight_enabled=:spotlight_enabled, spotlight_image_b64=:spotlight_image_b64,
+                        spotlight_headline=:spotlight_headline, spotlight_subtext=:spotlight_subtext,
+                        spotlight_url=:spotlight_url, spotlight_show_play=:spotlight_show_play,
+                        updated_at=NOW()
                     WHERE id=:profile_id
                 """), {**save_data, "profile_id": profile_id})
                 conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
             else:
                 profile_id = conn.execute(text("""
-                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text)
-                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text)
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play)
                     RETURNING id
                 """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
             for idx, item in enumerate(profile.get("links", [])):
@@ -2458,6 +2494,12 @@ def account_create_profile():
     profile["lead_capture_enabled"] = False
     profile["lead_capture_headline"] = "Stay Connected"
     profile["lead_capture_button_text"] = "Submit"
+    profile["spotlight_enabled"] = False
+    profile["spotlight_image_b64"] = ""
+    profile["spotlight_headline"] = ""
+    profile["spotlight_subtext"] = ""
+    profile["spotlight_url"] = ""
+    profile["spotlight_show_play"] = False
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
 
@@ -2554,6 +2596,12 @@ BUTTN_PROFILES = {
         "lead_capture_enabled": False,
         "lead_capture_headline": "Stay Connected",
         "lead_capture_button_text": "Submit",
+        "spotlight_enabled": False,
+        "spotlight_image_b64": "",
+        "spotlight_headline": "",
+        "spotlight_subtext": "",
+        "spotlight_url": "",
+        "spotlight_show_play": False,
         "links": [
             {"icon": "store", "label": "Button Text", "url": ""},
             {"icon": "youtube", "label": "", "url": ""},
@@ -3384,6 +3432,26 @@ def buttn_public_profile(username):
     if not links_html:
         links_html = '<div class="empty-note">No links have been added yet.</div>'
 
+    spotlight_html = ""
+    if profile.get("spotlight_enabled"):
+        spotlight_headline_raw = (profile.get("spotlight_headline") or "").strip()
+        spotlight_image_b64 = (profile.get("spotlight_image_b64") or "").strip()
+        spotlight_url_raw = (profile.get("spotlight_url") or "").strip()
+        if spotlight_headline_raw or spotlight_image_b64:
+            spotlight_headline = html.escape(spotlight_headline_raw or "Featured")
+            spotlight_subtext = html.escape((profile.get("spotlight_subtext") or "").strip())
+            spotlight_subtext_html = f'<div class="spotlight-subtext">{spotlight_subtext}</div>' if spotlight_subtext else ""
+            spotlight_image_html = ""
+            if spotlight_image_b64:
+                play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
+                spotlight_image_html = f'<div class="spotlight-image-wrap"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
+            spotlight_inner = f'{spotlight_image_html}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
+            safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
+            if safe_spotlight_url:
+                spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
+            else:
+                spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
+
     lead_capture_html = ""
     if profile.get("lead_capture_enabled"):
         if (request.args.get("lead") or "").strip().lower() == "thanks":
@@ -3436,6 +3504,14 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}\n.buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
 .buttn-link-label {{ flex:0 1 auto; }}
 .empty-note {{ text-align:center; color:#777; padding:18px; }}
+.spotlight-card {{ display:block; text-decoration:none; color:#111; background:#fff; border:1px solid #dde1e7; border-radius:20px; overflow:hidden; margin-bottom:18px; box-shadow:0 10px 24px rgba(0,0,0,0.08); }}
+.spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:1.65/1; overflow:hidden; }}
+.spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
+.spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
+.spotlight-copy {{ padding:16px; }}
+.spotlight-kicker {{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; color:#777; margin-bottom:6px; }}
+.spotlight-copy h2 {{ margin:0; font-size:21px; line-height:1.15; }}
+.spotlight-subtext {{ margin-top:8px; color:#555; font-size:14px; line-height:1.4; }}
 .lead-capture-card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:18px; margin-top:18px; box-shadow:0 8px 18px rgba(0,0,0,0.04); }}
 .lead-capture-card h2 {{ margin:0 0 12px; font-size:20px; text-align:center; }}
 .lead-capture-card input {{ width:100%; box-sizing:border-box; padding:13px; border:1px solid #cfd5df; border-radius:12px; font-size:15px; margin-bottom:10px; }}
@@ -3460,7 +3536,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
       <div class="actions">{action_buttons}</div>
     </div>
   </div>
-  <div class="links-area">{links_html}{lead_capture_html}</div>
+  <div class="links-area">{spotlight_html}{links_html}{lead_capture_html}</div>
   <div class="buttn-footer">Powered by BUTTN</div>
 </div>
 </body>
@@ -3664,6 +3740,11 @@ def buttn_edit_profile(username):
         profile["lead_capture_enabled"] = (request.form.get("lead_capture_enabled") == "on")
         profile["lead_capture_headline"] = (request.form.get("lead_capture_headline") or "Stay Connected").strip()[:120]
         profile["lead_capture_button_text"] = (request.form.get("lead_capture_button_text") or "Submit").strip()[:60]
+        profile["spotlight_enabled"] = (request.form.get("spotlight_enabled") == "on")
+        profile["spotlight_headline"] = (request.form.get("spotlight_headline") or "").strip()[:140]
+        profile["spotlight_subtext"] = (request.form.get("spotlight_subtext") or "").strip()[:240]
+        profile["spotlight_url"] = (request.form.get("spotlight_url") or "").strip()[:500]
+        profile["spotlight_show_play"] = (request.form.get("spotlight_show_play") == "on")
         try:
             profile["header_image_opacity"] = str(max(0, min(100, int(request.form.get("header_image_opacity") or 35))))
         except ValueError:
@@ -3678,6 +3759,11 @@ def buttn_edit_profile(username):
         if header_img is not None:
             header_img.thumbnail((1400, 900), Image.LANCZOS)
             profile["header_image_b64"] = image_to_base64(header_img)
+
+        spotlight_img = fetch_uploaded_image(request.files.get("spotlight_image_file"))
+        if spotlight_img is not None:
+            spotlight_img.thumbnail((1200, 800), Image.LANCZOS)
+            profile["spotlight_image_b64"] = image_to_base64(spotlight_img)
 
         links = []
         for i in range(1, MAX_PROFILE_LINKS + 1):
@@ -3803,6 +3889,16 @@ input[type="range"] {{ width:100%; }}
         <div class="small-help">When enabled, visitors can leave their name, email, and optional phone number on this profile. No email sending or SMTP needed.</div>
       </div>
       <div class="panel">
+        <h2>Featured Spotlight</h2>
+        <label class="toggle-row"><input id="spotlight_enabled_input" type="checkbox" name="spotlight_enabled" {'checked' if profile.get('spotlight_enabled') else ''}> Enable Spotlight</label>
+        <div class="field"><label>Spotlight Image</label><input id="spotlight_image_file_input" type="file" name="spotlight_image_file" accept="image/*"></div>
+        <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
+        <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
+        <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
+        <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
+        <div class="small-help">Use this for product drops, events, music releases, booking pages, YouTube, TikTok, Instagram Reels, or any featured link. No video hosting.</div>
+      </div>
+      <div class="panel">
         <h2>Header Text & Contact Button</h2>
         <div class="color-grid">
           <div class="field"><label>Name Text</label><input id="header_name_color_input" type="color" name="header_name_color" value="{val('header_name_color', '#111111')}"></div>
@@ -3832,9 +3928,11 @@ input[type="range"] {{ width:100%; }}
 <script>
 const existingLogoData = {json.dumps(profile.get("logo_b64", ""))};
 const existingHeaderImageData = {json.dumps(profile.get("header_image_b64", ""))};
+const existingSpotlightImageData = {json.dumps(profile.get("spotlight_image_b64", ""))};
 const iconOptions = {json.dumps({key: {"label": data["label"], "svg": SVG_ICON_MAP.get(key, "✦")} for key, data in LINK_ICON_MAP.items()})};
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
+let liveSpotlightImageData = existingSpotlightImageData;
 
 function getEl(id) {{ return document.getElementById(id); }}
 function getVal(id, fallback) {{ const el = getEl(id); return el ? (el.value || fallback || "") : (fallback || ""); }}
@@ -3920,6 +4018,11 @@ function renderLivePreview() {{
     const leadCaptureEnabled = !!(getEl("lead_capture_enabled_input") && getEl("lead_capture_enabled_input").checked);
     const leadHeadline = getVal("lead_capture_headline_input", "Stay Connected");
     const leadButtonText = getVal("lead_capture_button_text_input", "Submit");
+    const spotlightEnabled = !!(getEl("spotlight_enabled_input") && getEl("spotlight_enabled_input").checked);
+    const spotlightHeadline = getVal("spotlight_headline_input", "");
+    const spotlightSubtext = getVal("spotlight_subtext_input", "");
+    const spotlightUrl = getVal("spotlight_url_input", "");
+    const spotlightShowPlay = !!(getEl("spotlight_show_play_input") && getEl("spotlight_show_play_input").checked);
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
@@ -3934,6 +4037,21 @@ function renderLivePreview() {{
     if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
     if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
     actions += '<a class="action-btn" href="#">Contact Info</a>';
+
+    let spotlightHtml = "";
+    if (spotlightEnabled && ((spotlightHeadline || "").trim() || liveSpotlightImageData)) {{
+        const spotlightImage = liveSpotlightImageData
+            ? `<div class="spotlight-image-wrap"><img src="data:image/png;base64,${{liveSpotlightImageData}}" alt="Featured Spotlight">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>`
+            : "";
+        const spotlightSubtextHtml = (spotlightSubtext || "").trim()
+            ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
+            : "";
+        const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
+        const href = safeUrl(spotlightUrl);
+        spotlightHtml = href
+            ? `<a class="spotlight-card" href="${{escapeHtml(href)}}" target="_blank" rel="noopener">${{spotlightInner}}</a>`
+            : `<div class="spotlight-card">${{spotlightInner}}</div>`;
+    }}
 
     root.innerHTML = `
 <style>
@@ -3955,6 +4073,14 @@ function renderLivePreview() {{
 #live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}\n#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
 #live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
+#live_buttn_preview .spotlight-card {{ display:block; text-decoration:none; color:#111; background:#fff; border:1px solid #dde1e7; border-radius:20px; overflow:hidden; margin-bottom:18px; box-shadow:0 10px 24px rgba(0,0,0,0.08); }}
+#live_buttn_preview .spotlight-image-wrap {{ position:relative; width:100%; background:#111; aspect-ratio:1.65/1; overflow:hidden; }}
+#live_buttn_preview .spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
+#live_buttn_preview .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
+#live_buttn_preview .spotlight-copy {{ padding:16px; }}
+#live_buttn_preview .spotlight-kicker {{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; color:#777; margin-bottom:6px; }}
+#live_buttn_preview .spotlight-copy h2 {{ margin:0; font-size:21px; line-height:1.15; }}
+#live_buttn_preview .spotlight-subtext {{ margin-top:8px; color:#555; font-size:14px; line-height:1.4; }}
 #live_buttn_preview .lead-capture-card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:18px; margin-top:18px; box-shadow:0 8px 18px rgba(0,0,0,0.04); }}
 #live_buttn_preview .lead-capture-card h2 {{ margin:0 0 12px; font-size:20px; text-align:center; }}
 #live_buttn_preview .lead-capture-card input {{ width:100%; box-sizing:border-box; padding:13px; border:1px solid #cfd5df; border-radius:12px; font-size:15px; margin-bottom:10px; }}
@@ -3972,7 +4098,7 @@ function renderLivePreview() {{
       <div class="actions">${{actions}}</div>
     </div>
   </div>
-  <div class="links-area">${{collectLinks()}}${{leadCaptureEnabled ? `<div class="lead-capture-card"><h2>${{escapeHtml(leadHeadline)}}</h2><form><input type="text" placeholder="Your name"><input type="email" placeholder="Your email" required><input type="tel" placeholder="Phone (optional)"><button type="button">${{escapeHtml(leadButtonText)}}</button></form></div>` : ""}}</div>
+  <div class="links-area">${{spotlightHtml}}${{collectLinks()}}${{leadCaptureEnabled ? `<div class="lead-capture-card"><h2>${{escapeHtml(leadHeadline)}}</h2><form><input type="text" placeholder="Your name"><input type="email" placeholder="Your email" required><input type="tel" placeholder="Phone (optional)"><button type="button">${{escapeHtml(leadButtonText)}}</button></form></div>` : ""}}</div>
   <div class="buttn-footer">Powered by BUTTN</div>
 </div>`;
 }}
@@ -3983,7 +4109,8 @@ function renderLivePreview() {{
  "link_bg_color_input", "link_text_color_input", "link_border_color_input",
  "header_name_color_input", "header_title_color_input", "action_bg_color_input",
  "action_text_color_input", "action_border_color_input",
- "lead_capture_headline_input", "lead_capture_button_text_input"
+ "lead_capture_headline_input", "lead_capture_button_text_input",
+ "spotlight_headline_input", "spotlight_subtext_input", "spotlight_url_input"
 ].forEach(function(id) {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
@@ -3991,6 +4118,14 @@ function renderLivePreview() {{
 const leadCaptureEnabledInput = getEl("lead_capture_enabled_input");
 if (leadCaptureEnabledInput) {{
     leadCaptureEnabledInput.addEventListener("change", renderLivePreview);
+}}
+const spotlightEnabledInput = getEl("spotlight_enabled_input");
+if (spotlightEnabledInput) {{
+    spotlightEnabledInput.addEventListener("change", renderLivePreview);
+}}
+const spotlightPlayInput = getEl("spotlight_show_play_input");
+if (spotlightPlayInput) {{
+    spotlightPlayInput.addEventListener("change", renderLivePreview);
 }}
 function wireLinkEditorEvents() {{
     document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
@@ -4028,8 +4163,10 @@ if (addLinkBtn) {{
 }}
 const logoInput = getEl("logo_file_input");
 const headerInput = getEl("header_image_file_input");
+const spotlightImageInput = getEl("spotlight_image_file_input");
 if (logoInput) logoInput.addEventListener("change", function() {{ readImageFile(logoInput, function(data) {{ liveLogoData = data; }}); }});
 if (headerInput) headerInput.addEventListener("change", function() {{ readImageFile(headerInput, function(data) {{ liveHeaderImageData = data; }}); }});
+if (spotlightImageInput) spotlightImageInput.addEventListener("change", function() {{ readImageFile(spotlightImageInput, function(data) {{ liveSpotlightImageData = data; }}); }});
 renderLivePreview();
 </script>
 </body>
