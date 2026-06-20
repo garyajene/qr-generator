@@ -2808,15 +2808,82 @@ def _record_link_click(username, link_label, link_url):
         pass
 
 
+
 def _get_profile_analytics(username):
     profile_id = _db_profile_id(username)
-    data = {"views": 0, "clicks": []}
+    data = {
+        "views": 0,
+        "views_today": 0,
+        "views_7_days": 0,
+        "views_30_days": 0,
+        "clicks_total": 0,
+        "clicks_today": 0,
+        "clicks_7_days": 0,
+        "clicks_30_days": 0,
+        "clicks": [],
+        "daily_views": [],
+        "daily_clicks": [],
+    }
     if not profile_id or engine is None:
         return data
+
     try:
         init_database()
         with engine.connect() as conn:
-            data["views"] = conn.execute(text("SELECT COUNT(*) FROM profile_views WHERE profile_id = :profile_id"), {"profile_id": profile_id}).scalar() or 0
+            data["views"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM profile_views
+                WHERE profile_id = :profile_id
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["views_today"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM profile_views
+                WHERE profile_id = :profile_id
+                  AND viewed_at >= date_trunc('day', NOW())
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["views_7_days"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM profile_views
+                WHERE profile_id = :profile_id
+                  AND viewed_at >= NOW() - INTERVAL '7 days'
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["views_30_days"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM profile_views
+                WHERE profile_id = :profile_id
+                  AND viewed_at >= NOW() - INTERVAL '30 days'
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["clicks_total"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM link_clicks
+                WHERE profile_id = :profile_id
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["clicks_today"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM link_clicks
+                WHERE profile_id = :profile_id
+                  AND clicked_at >= date_trunc('day', NOW())
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["clicks_7_days"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM link_clicks
+                WHERE profile_id = :profile_id
+                  AND clicked_at >= NOW() - INTERVAL '7 days'
+            """), {"profile_id": profile_id}).scalar() or 0
+
+            data["clicks_30_days"] = conn.execute(text("""
+                SELECT COUNT(*)
+                FROM link_clicks
+                WHERE profile_id = :profile_id
+                  AND clicked_at >= NOW() - INTERVAL '30 days'
+            """), {"profile_id": profile_id}).scalar() or 0
+
             rows = conn.execute(text("""
                 SELECT link_label, link_url, COUNT(*) AS click_count
                 FROM link_clicks
@@ -2824,12 +2891,44 @@ def _get_profile_analytics(username):
                 GROUP BY link_label, link_url
                 ORDER BY click_count DESC, link_label ASC
             """), {"profile_id": profile_id}).mappings().all()
+
+            daily_views = conn.execute(text("""
+                SELECT to_char(day::date, 'Mon DD') AS day_label, COALESCE(COUNT(profile_views.id), 0) AS total
+                FROM generate_series(
+                    date_trunc('day', NOW()) - INTERVAL '6 days',
+                    date_trunc('day', NOW()),
+                    INTERVAL '1 day'
+                ) AS day
+                LEFT JOIN profile_views
+                  ON profile_views.profile_id = :profile_id
+                 AND profile_views.viewed_at >= day
+                 AND profile_views.viewed_at < day + INTERVAL '1 day'
+                GROUP BY day
+                ORDER BY day ASC
+            """), {"profile_id": profile_id}).mappings().all()
+
+            daily_clicks = conn.execute(text("""
+                SELECT to_char(day::date, 'Mon DD') AS day_label, COALESCE(COUNT(link_clicks.id), 0) AS total
+                FROM generate_series(
+                    date_trunc('day', NOW()) - INTERVAL '6 days',
+                    date_trunc('day', NOW()),
+                    INTERVAL '1 day'
+                ) AS day
+                LEFT JOIN link_clicks
+                  ON link_clicks.profile_id = :profile_id
+                 AND link_clicks.clicked_at >= day
+                 AND link_clicks.clicked_at < day + INTERVAL '1 day'
+                GROUP BY day
+                ORDER BY day ASC
+            """), {"profile_id": profile_id}).mappings().all()
+
         data["clicks"] = [dict(row) for row in rows]
+        data["daily_views"] = [dict(row) for row in daily_views]
+        data["daily_clicks"] = [dict(row) for row in daily_clicks]
     except Exception:
         pass
+
     return data
-
-
 
 
 @app.route("/account/analytics/<username>")
@@ -2847,7 +2946,16 @@ def account_profile_analytics(username):
     analytics = _get_profile_analytics(username)
     safe_username = html.escape(username)
     safe_name = html.escape(profile.get("name") or _display_name_from_username(username) or username)
+
     view_count = int(analytics.get("views") or 0)
+    views_today = int(analytics.get("views_today") or 0)
+    views_7_days = int(analytics.get("views_7_days") or 0)
+    views_30_days = int(analytics.get("views_30_days") or 0)
+
+    clicks_total = int(analytics.get("clicks_total") or 0)
+    clicks_today = int(analytics.get("clicks_today") or 0)
+    clicks_7_days = int(analytics.get("clicks_7_days") or 0)
+    clicks_30_days = int(analytics.get("clicks_30_days") or 0)
 
     click_rows = ""
     for row in analytics.get("clicks", []):
@@ -2864,22 +2972,72 @@ def account_profile_analytics(username):
     if not click_rows:
         click_rows = '<p class="empty">No link clicks recorded yet.</p>'
 
+    max_daily = 1
+    for item in analytics.get("daily_views", []):
+        max_daily = max(max_daily, int(item.get("total") or 0))
+    for item in analytics.get("daily_clicks", []):
+        max_daily = max(max_daily, int(item.get("total") or 0))
+
+    daily_rows = ""
+    daily_views = analytics.get("daily_views", [])
+    daily_clicks = analytics.get("daily_clicks", [])
+    for idx, view_item in enumerate(daily_views):
+        day_label = html.escape(view_item.get("day_label") or "")
+        day_views = int(view_item.get("total") or 0)
+        day_clicks = 0
+        if idx < len(daily_clicks):
+            day_clicks = int(daily_clicks[idx].get("total") or 0)
+
+        view_width = int((day_views / max_daily) * 100) if max_daily else 0
+        click_width = int((day_clicks / max_daily) * 100) if max_daily else 0
+
+        daily_rows += f"""
+        <div class="daily-row">
+            <div class="daily-day">{day_label}</div>
+            <div class="daily-bars">
+                <div class="bar-line"><span>Views</span><div class="bar-track"><div class="bar-fill" style="width:{view_width}%"></div></div><strong>{day_views}</strong></div>
+                <div class="bar-line"><span>Clicks</span><div class="bar-track"><div class="bar-fill bar-fill-clicks" style="width:{click_width}%"></div></div><strong>{day_clicks}</strong></div>
+            </div>
+        </div>
+        """
+
+    if not daily_rows:
+        daily_rows = '<p class="empty">No daily data yet.</p>'
+
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analytics | BUTTN</title>
 <style>
 body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
-.wrap {{ max-width:760px; margin:40px auto; padding:20px; }}
+.wrap {{ max-width:860px; margin:40px auto; padding:20px; }}
 .card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.04); margin-bottom:18px; }}
 h1 {{ margin:0 0 6px; }} .muted, .empty {{ color:#666; }}
-.big-number {{ font-size:46px; font-weight:900; margin-top:10px; }}
+.stat-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }}
+.stat-card {{ background:#f8fafc; border:1px solid #e1e6ee; border-radius:16px; padding:18px; }}
+.stat-card h3 {{ margin:0 0 8px; color:#555; font-size:14px; text-transform:uppercase; letter-spacing:.04em; }}
+.big-number {{ font-size:42px; font-weight:900; line-height:1; }}
+.small-stats {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }}
+.small-stat {{ background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:12px; }}
+.small-stat span {{ display:block; color:#666; font-size:12px; font-weight:800; margin-bottom:5px; }}
+.small-stat strong {{ font-size:22px; }}
 .analytics-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }}
 .analytics-row:first-child {{ border-top:none; }}
 .analytics-row span {{ color:#666; font-size:13px; word-break:break-all; }}
 .count {{ font-size:24px; font-weight:900; }}
+.daily-row {{ display:grid; grid-template-columns:86px 1fr; gap:14px; align-items:center; border-top:1px solid #eee; padding:14px 0; }}
+.daily-row:first-child {{ border-top:none; }}
+.daily-day {{ font-weight:900; color:#444; }}
+.bar-line {{ display:grid; grid-template-columns:48px 1fr 34px; gap:10px; align-items:center; margin:5px 0; font-size:13px; color:#555; }}
+.bar-track {{ height:10px; background:#eef1f5; border-radius:999px; overflow:hidden; }}
+.bar-fill {{ height:10px; background:#111; border-radius:999px; }}
+.bar-fill-clicks {{ opacity:.55; }}
 a {{ color:#111; font-weight:800; }}
 {_app_nav_css()}
+@media (max-width:640px) {{
+    .stat-grid, .small-stats {{ grid-template-columns:1fr; }}
+    .daily-row {{ grid-template-columns:1fr; }}
+}}
 </style></head>
 <body>{_app_nav_html(username)}
 <div class="wrap">
@@ -2888,12 +3046,35 @@ a {{ color:#111; font-weight:800; }}
     <div class="muted">{safe_name} /{safe_username}</div>
     <p><a href="/account">Back to Account</a> &nbsp; <a href="/{safe_username}" target="_blank">View Profile</a></p>
   </div>
-  <div class="card">
-    <h2>Profile Views</h2>
-    <div class="big-number">{view_count}</div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <h3>Profile Views</h3>
+      <div class="big-number">{view_count}</div>
+      <div class="small-stats">
+        <div class="small-stat"><span>Today</span><strong>{views_today}</strong></div>
+        <div class="small-stat"><span>7 Days</span><strong>{views_7_days}</strong></div>
+        <div class="small-stat"><span>30 Days</span><strong>{views_30_days}</strong></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <h3>Link Clicks</h3>
+      <div class="big-number">{clicks_total}</div>
+      <div class="small-stats">
+        <div class="small-stat"><span>Today</span><strong>{clicks_today}</strong></div>
+        <div class="small-stat"><span>7 Days</span><strong>{clicks_7_days}</strong></div>
+        <div class="small-stat"><span>30 Days</span><strong>{clicks_30_days}</strong></div>
+      </div>
+    </div>
   </div>
+
   <div class="card">
-    <h2>Link Clicks</h2>
+    <h2>Last 7 Days</h2>
+    {daily_rows}
+  </div>
+
+  <div class="card">
+    <h2>Top Clicked Links</h2>
     {click_rows}
   </div>
 </div>
