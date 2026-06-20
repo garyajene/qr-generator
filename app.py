@@ -3937,6 +3937,9 @@ def buttn_edit_profile(username):
             header_img.thumbnail((1400, 900), Image.LANCZOS)
             profile["header_image_b64"] = image_to_base64(header_img)
 
+        if (request.form.get("clear_spotlight_image") or "").strip() == "1":
+            profile["spotlight_image_b64"] = ""
+
         spotlight_img = fetch_uploaded_image(request.files.get("spotlight_image_file"))
         if spotlight_img is not None:
             spotlight_img.thumbnail((1200, 1600), Image.LANCZOS)
@@ -4016,6 +4019,7 @@ input[type="range"] {{ width:100%; }}
 .live-link-icon {{ width:100%; padding:11px; border:1px solid #cfd5df; border-radius:10px; font-size:15px; background:#fff; }}
 .remove-link-btn {{ width:44px; height:44px; border:none; border-radius:10px; background:#f1f1f1; color:#333; font-size:24px; line-height:1; cursor:pointer; margin:0; padding:0; }}
 .add-link-btn {{ width:100%; padding:12px; border:1px dashed #9aa4b2; background:#f8fafc; color:#111; font-size:15px; font-weight:800; border-radius:12px; cursor:pointer; margin-top:6px; }}
+.secondary-btn {{ width:100%; padding:11px; border:1px solid #cfd5df; background:#f8fafc; color:#111; font-size:14px; font-weight:800; border-radius:12px; cursor:pointer; margin-top:8px; }}
 .save-btn {{ width:100%; padding:15px; border:none; background:#111; color:#fff; font-size:17px; font-weight:800; border-radius:14px; cursor:pointer; }}
 .preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
 .preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
@@ -4068,7 +4072,13 @@ input[type="range"] {{ width:100%; }}
       <div class="panel">
         <h2>Featured Spotlight</h2>
         <label class="toggle-row"><input id="spotlight_enabled_input" type="checkbox" name="spotlight_enabled" {'checked' if profile.get('spotlight_enabled') else ''}> Enable Spotlight</label>
-        <div class="field"><label>Spotlight Image</label><input id="spotlight_image_file_input" type="file" name="spotlight_image_file" accept="image/*"></div>
+        <div class="field">
+          <label>Spotlight Image</label>
+          <input id="spotlight_image_file_input" type="file" name="spotlight_image_file" accept="image/*">
+          <input id="clear_spotlight_image_input" type="hidden" name="clear_spotlight_image" value="0">
+          <button type="button" id="clear_spotlight_image_btn" class="secondary-btn">Clear Spotlight Image</button>
+          <div class="small-help">Clearing the image lets the Spotlight use the video/embed preview or text-only card.</div>
+        </div>
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
         <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
@@ -4374,9 +4384,22 @@ if (addLinkBtn) {{
 const logoInput = getEl("logo_file_input");
 const headerInput = getEl("header_image_file_input");
 const spotlightImageInput = getEl("spotlight_image_file_input");
+const clearSpotlightImageInput = getEl("clear_spotlight_image_input");
+const clearSpotlightImageBtn = getEl("clear_spotlight_image_btn");
 if (logoInput) logoInput.addEventListener("change", function() {{ readImageFile(logoInput, function(data) {{ liveLogoData = data; }}); }});
 if (headerInput) headerInput.addEventListener("change", function() {{ readImageFile(headerInput, function(data) {{ liveHeaderImageData = data; }}); }});
-if (spotlightImageInput) spotlightImageInput.addEventListener("change", function() {{ readImageFile(spotlightImageInput, function(data) {{ liveSpotlightImageData = data; }}); }});
+if (spotlightImageInput) spotlightImageInput.addEventListener("change", function() {{
+    if (clearSpotlightImageInput) clearSpotlightImageInput.value = "0";
+    readImageFile(spotlightImageInput, function(data) {{ liveSpotlightImageData = data; }});
+}});
+if (clearSpotlightImageBtn) {{
+    clearSpotlightImageBtn.addEventListener("click", function() {{
+        liveSpotlightImageData = "";
+        if (spotlightImageInput) spotlightImageInput.value = "";
+        if (clearSpotlightImageInput) clearSpotlightImageInput.value = "1";
+        renderLivePreview();
+    }});
+}}
 renderLivePreview();
 </script>
 </body>
