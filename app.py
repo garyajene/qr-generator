@@ -171,8 +171,14 @@ def init_database():
                 profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
                 name TEXT DEFAULT '',
                 email TEXT NOT NULL,
+                phone TEXT DEFAULT '',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profile_leads
+            ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''
         """))
 
     _db_initialized = True
@@ -2846,19 +2852,20 @@ def _record_link_click(username, link_label, link_url):
 
 
 
-def _record_lead(username, lead_name, lead_email):
+def _record_lead(username, lead_name, lead_email, lead_phone=""):
     profile_id = _db_profile_id(username)
     lead_name = (lead_name or "").strip()[:120]
     lead_email = (lead_email or "").strip().lower()[:240]
+    lead_phone = (lead_phone or "").strip()[:80]
     if not profile_id or engine is None or not lead_email or "@" not in lead_email:
         return False
     try:
         init_database()
         with engine.begin() as conn:
             conn.execute(text("""
-                INSERT INTO profile_leads (profile_id, name, email)
-                VALUES (:profile_id, :name, :email)
-            """), {"profile_id": profile_id, "name": lead_name, "email": lead_email})
+                INSERT INTO profile_leads (profile_id, name, email, phone)
+                VALUES (:profile_id, :name, :email, :phone)
+            """), {"profile_id": profile_id, "name": lead_name, "email": lead_email, "phone": lead_phone})
         return True
     except Exception:
         return False
@@ -2885,7 +2892,7 @@ def _get_profile_leads(username, limit=200):
         init_database()
         with engine.connect() as conn:
             rows = conn.execute(text("""
-                SELECT name, email, to_char(created_at, 'Mon DD, YYYY HH12:MI AM') AS created_label
+                SELECT name, email, phone, to_char(created_at, 'Mon DD, YYYY HH12:MI AM') AS created_label
                 FROM profile_leads
                 WHERE profile_id = :profile_id
                 ORDER BY created_at DESC, id DESC
@@ -3386,6 +3393,7 @@ def buttn_public_profile(username):
           <form method="post" action="/buttn/lead/{html.escape(_normalize_buttn_url(username))}">
             <input type="text" name="lead_name" placeholder="Your name">
             <input type="email" name="lead_email" placeholder="Your email" required>
+            <input type="tel" name="lead_phone" placeholder="Phone (optional)">
             <button type="submit">{lead_button_text}</button>
           </form>
         </div>
@@ -3483,7 +3491,8 @@ def buttn_submit_lead(username):
         return redirect(f"/{username}")
     lead_name = (request.form.get("lead_name") or "").strip()
     lead_email = (request.form.get("lead_email") or "").strip()
-    _record_lead(username, lead_name, lead_email)
+    lead_phone = (request.form.get("lead_phone") or "").strip()
+    _record_lead(username, lead_name, lead_email, lead_phone)
     return redirect(f"/{username}?lead=thanks")
 
 
@@ -3507,10 +3516,12 @@ def account_profile_leads(username):
     for row in rows:
         lead_name = html.escape(row.get("name") or "No name")
         lead_email = html.escape(row.get("email") or "")
+        lead_phone = html.escape(row.get("phone") or "")
         created_label = html.escape(row.get("created_label") or "")
+        phone_html = f'<br><a href="tel:{lead_phone}">{lead_phone}</a>' if lead_phone else ""
         lead_rows += f"""
         <div class="lead-row">
-            <div><strong>{lead_name}</strong><br><a href="mailto:{lead_email}">{lead_email}</a></div>
+            <div><strong>{lead_name}</strong><br><a href="mailto:{lead_email}">{lead_email}</a>{phone_html}</div>
             <div class="lead-date">{created_label}</div>
         </div>
         """
@@ -3739,7 +3750,7 @@ input[type="range"] {{ width:100%; }}
         <label class="toggle-row"><input id="lead_capture_enabled_input" type="checkbox" name="lead_capture_enabled" {'checked' if profile.get('lead_capture_enabled') else ''}> Enable Lead Capture</label>
         <div class="field"><label>Headline</label><input id="lead_capture_headline_input" type="text" name="lead_capture_headline" value="{val('lead_capture_headline', 'Stay Connected')}" placeholder="Stay Connected"></div>
         <div class="field"><label>Button Text</label><input id="lead_capture_button_text_input" type="text" name="lead_capture_button_text" value="{val('lead_capture_button_text', 'Submit')}" placeholder="Submit"></div>
-        <div class="small-help">When enabled, visitors can leave their name and email on this profile. No email sending or SMTP needed.</div>
+        <div class="small-help">When enabled, visitors can leave their name, email, and optional phone number on this profile. No email sending or SMTP needed.</div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
@@ -3856,6 +3867,9 @@ function renderLivePreview() {{
     const actionBg = getVal("action_bg_color_input", "#ffffff");
     const actionText = getVal("action_text_color_input", "#111111");
     const actionBorder = getVal("action_border_color_input", "#d8dde6");
+    const leadCaptureEnabled = !!(getEl("lead_capture_enabled_input") && getEl("lead_capture_enabled_input").checked);
+    const leadHeadline = getVal("lead_capture_headline_input", "Stay Connected");
+    const leadButtonText = getVal("lead_capture_button_text_input", "Submit");
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
@@ -3891,6 +3905,10 @@ function renderLivePreview() {{
 #live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}\n#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
 #live_buttn_preview .buttn-link-label {{ flex:0 1 auto; }}
 #live_buttn_preview .empty-note {{ text-align:center; color:#777; padding:18px; }}
+#live_buttn_preview .lead-capture-card {{ background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:18px; margin-top:18px; box-shadow:0 8px 18px rgba(0,0,0,0.04); }}
+#live_buttn_preview .lead-capture-card h2 {{ margin:0 0 12px; font-size:20px; text-align:center; }}
+#live_buttn_preview .lead-capture-card input {{ width:100%; box-sizing:border-box; padding:13px; border:1px solid #cfd5df; border-radius:12px; font-size:15px; margin-bottom:10px; }}
+#live_buttn_preview .lead-capture-card button {{ width:100%; border:none; border-radius:14px; padding:14px; background:#111; color:#fff; font-size:16px; font-weight:900; cursor:pointer; }}
 #live_buttn_preview .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
 </style>
 <div class="phone-shell">
@@ -3904,7 +3922,7 @@ function renderLivePreview() {{
       <div class="actions">${{actions}}</div>
     </div>
   </div>
-  <div class="links-area">${{collectLinks()}}</div>
+  <div class="links-area">${{collectLinks()}}${{leadCaptureEnabled ? `<div class="lead-capture-card"><h2>${{escapeHtml(leadHeadline)}}</h2><form><input type="text" placeholder="Your name"><input type="email" placeholder="Your email" required><input type="tel" placeholder="Phone (optional)"><button type="button">${{escapeHtml(leadButtonText)}}</button></form></div>` : ""}}</div>
   <div class="buttn-footer">Powered by BUTTN</div>
 </div>`;
 }}
@@ -3914,11 +3932,16 @@ function renderLivePreview() {{
  "header_bg_color_input", "header_image_opacity_input", "page_bg_color_input",
  "link_bg_color_input", "link_text_color_input", "link_border_color_input",
  "header_name_color_input", "header_title_color_input", "action_bg_color_input",
- "action_text_color_input", "action_border_color_input"
+ "action_text_color_input", "action_border_color_input",
+ "lead_capture_headline_input", "lead_capture_button_text_input"
 ].forEach(function(id) {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
 }});
+const leadCaptureEnabledInput = getEl("lead_capture_enabled_input");
+if (leadCaptureEnabledInput) {{
+    leadCaptureEnabledInput.addEventListener("change", renderLivePreview);
+}}
 function wireLinkEditorEvents() {{
     document.querySelectorAll(".live-link-label, .live-link-url").forEach(function(el) {{
         el.addEventListener("input", renderLivePreview);
