@@ -1,5 +1,6 @@
 from flask import Flask, request, redirect, session, Response
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 import base64
 import random
 from collections import Counter
@@ -3385,19 +3386,28 @@ def buttn_public_profile(username):
 
     lead_capture_html = ""
     if profile.get("lead_capture_enabled"):
-        lead_headline = html.escape(profile.get("lead_capture_headline") or "Stay Connected")
-        lead_button_text = html.escape(profile.get("lead_capture_button_text") or "Submit")
-        lead_capture_html = f"""
-        <div class="lead-capture-card">
-          <h2>{lead_headline}</h2>
-          <form method="post" action="/buttn/lead/{html.escape(_normalize_buttn_url(username))}">
-            <input type="text" name="lead_name" placeholder="Your name">
-            <input type="email" name="lead_email" placeholder="Your email" required>
-            <input type="tel" name="lead_phone" placeholder="Phone (optional)">
-            <button type="submit">{lead_button_text}</button>
-          </form>
-        </div>
-        """
+        if (request.args.get("lead") or "").strip().lower() == "thanks":
+            lead_capture_html = """
+            <div class="lead-capture-card lead-success-card">
+              <div class="lead-success-icon">✓</div>
+              <h2>Thanks!</h2>
+              <p>We've got your information and will keep in touch.</p>
+            </div>
+            """
+        else:
+            lead_headline = html.escape(profile.get("lead_capture_headline") or "Stay Connected")
+            lead_button_text = html.escape(profile.get("lead_capture_button_text") or "Submit")
+            lead_capture_html = f"""
+            <div class="lead-capture-card">
+              <h2>{lead_headline}</h2>
+              <form method="post" action="/buttn/lead/{html.escape(_normalize_buttn_url(username))}">
+                <input type="text" name="lead_name" placeholder="Your name">
+                <input type="email" name="lead_email" placeholder="Your email" required>
+                <input type="tel" name="lead_phone" placeholder="Phone (optional)">
+                <button type="submit">{lead_button_text}</button>
+              </form>
+            </div>
+            """
 
     return f"""
 <!doctype html>
@@ -3430,6 +3440,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .lead-capture-card h2 {{ margin:0 0 12px; font-size:20px; text-align:center; }}
 .lead-capture-card input {{ width:100%; box-sizing:border-box; padding:13px; border:1px solid #cfd5df; border-radius:12px; font-size:15px; margin-bottom:10px; }}
 .lead-capture-card button {{ width:100%; border:none; border-radius:14px; padding:14px; background:#111; color:#fff; font-size:16px; font-weight:900; cursor:pointer; }}
+.lead-success-card {{ text-align:center; }}
+.lead-success-icon {{ width:42px; height:42px; margin:0 auto 10px; border-radius:999px; background:#111; color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; }}
+.lead-success-card p {{ margin:0; color:#555; font-size:15px; line-height:1.45; }}
 .buttn-footer {{ text-align:center; font-size:12px; color:#777; padding: 6px 20px 26px; }}
 {_app_nav_css()}
 </style>
@@ -3496,6 +3509,43 @@ def buttn_submit_lead(username):
     return redirect(f"/{username}?lead=thanks")
 
 
+@app.route("/account/leads/<username>/export")
+def account_profile_leads_export(username):
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+
+    username = _normalize_buttn_url(username)
+    owner_id = _db_profile_owner_id(username)
+    if not owner_id or owner_id != user_id:
+        return redirect("/account")
+
+    rows = _get_profile_leads(username, limit=10000)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Email", "Phone", "Date"])
+
+    for row in rows:
+        writer.writerow([
+            row.get("name") or "",
+            row.get("email") or "",
+            row.get("phone") or "",
+            row.get("created_label") or "",
+        ])
+
+    csv_data = output.getvalue()
+    filename = f"buttn-leads-{username}.csv"
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        },
+    )
+
+
 @app.route("/account/leads/<username>")
 def account_profile_leads(username):
     user_id = _current_user_id()
@@ -3541,7 +3591,7 @@ h1 {{ margin:0 0 6px; }} .muted, .empty {{ color:#666; }}
 .lead-row {{ display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eee; padding:16px 0; align-items:center; }}
 .lead-row:first-child {{ border-top:none; }}
 .lead-date {{ color:#666; font-size:13px; text-align:right; }}
-a {{ color:#111; font-weight:800; }}
+a {{ color:#111; font-weight:800; }}\n.export-btn {{ display:inline-block; background:#111; color:#fff; text-decoration:none; border-radius:12px; padding:12px 16px; }}
 {_app_nav_css()}
 @media (max-width:640px) {{ .lead-row {{ align-items:flex-start; flex-direction:column; }} .lead-date {{ text-align:left; }} }}
 </style></head>
@@ -3550,7 +3600,7 @@ a {{ color:#111; font-weight:800; }}
   <div class="card">
     <h1>Leads</h1>
     <div class="muted">{safe_name} /{safe_username}</div>
-    <p><a href="/account">Back to Account</a> &nbsp; <a href="/buttn/edit/{safe_username}">Edit Profile</a> &nbsp; <a href="/{safe_username}" target="_blank">View Profile</a></p>
+    <p><a href="/account">Back to Account</a> &nbsp; <a href="/buttn/edit/{safe_username}">Edit Profile</a> &nbsp; <a href="/{safe_username}" target="_blank">View Profile</a></p>\n    <p><a class="export-btn" href="/account/leads/{safe_username}/export">Download Leads CSV</a></p>
   </div>
   <div class="card">
     <h2>Captured Leads ({len(rows)})</h2>
