@@ -2386,6 +2386,37 @@ def _db_profile_owner_id(username):
         return None
 
 
+def _db_profile_account_type(username):
+    """
+    Return the owning user's account type for a profile.
+    Defaults to free when the profile is database-backed but the plan cannot be verified.
+    Demo/in-memory profiles default to pro so local testing keeps full functionality.
+    """
+    if engine is None:
+        return "pro"
+
+    username = _normalize_buttn_url(username)
+    if not username:
+        return "free"
+
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT COALESCE(users.account_type, 'free') AS account_type
+                FROM profiles
+                LEFT JOIN users ON users.id = profiles.user_id
+                WHERE profiles.username = :username
+            """), {"username": username}).first()
+        return (row[0] if row and row[0] else "free").strip().lower()
+    except Exception:
+        return "free"
+
+
+def _profile_has_pro_access(username):
+    return _db_profile_account_type(username) == "pro"
+
+
 def _user_profile_count(user_id):
     if engine is None or not user_id:
         return 0
@@ -3671,6 +3702,7 @@ def buttn_start_from_qr(username):
 def buttn_public_profile(username):
     username = _normalize_buttn_url(username or "test") or "test"
     profile = _get_profile(username)
+    profile_has_pro_access = _profile_has_pro_access(username)
     _record_profile_view(username)
     safe_name = html.escape(profile.get("name", ""))
     safe_title = html.escape(profile.get("title", ""))
@@ -3735,58 +3767,80 @@ def buttn_public_profile(username):
         spotlight_headline_raw = (profile.get("spotlight_headline") or "").strip()
         spotlight_image_b64 = (profile.get("spotlight_image_b64") or "").strip()
         spotlight_url_raw = (profile.get("spotlight_url") or "").strip()
-        spotlight_behavior = _normalize_spotlight_open_behavior(profile.get("spotlight_open_behavior"))
-        spotlight_autoplay = bool(profile.get("spotlight_autoplay"))
         spotlight_shape = _normalize_spotlight_media_shape(profile.get("spotlight_media_shape"))
         spotlight_aspect = _spotlight_aspect_style(spotlight_shape)
+
         if spotlight_headline_raw or spotlight_image_b64 or spotlight_url_raw:
             spotlight_headline = html.escape(spotlight_headline_raw or "Featured")
             spotlight_subtext = html.escape((profile.get("spotlight_subtext") or "").strip())
             spotlight_subtext_html = f'<div class="spotlight-subtext">{spotlight_subtext}</div>' if spotlight_subtext else ""
-            spotlight_image_html = ""
             safe_spotlight_url = _safe_url(spotlight_url_raw) if spotlight_url_raw else ""
-            spotlight_auto_thumb = _spotlight_thumbnail_url(safe_spotlight_url) if safe_spotlight_url else ""
-            play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
 
-            if spotlight_image_b64:
-                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
-            elif spotlight_auto_thumb:
-                spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="{html.escape(spotlight_auto_thumb)}" alt="Featured Spotlight">{play_html}</div>'
+            # FREE PLAN PUBLIC PROFILE:
+            # Keep Spotlight as a simple image/link card only.
+            # No automatic thumbnails, no play overlay, no embedded video, no autoplay.
+            if not profile_has_pro_access:
+                spotlight_image_html = ""
+                if spotlight_image_b64:
+                    spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight"></div>'
 
-            spotlight_copy = f'<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
-
-            if safe_spotlight_url and spotlight_behavior == "play_page":
-                autoplay_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=spotlight_autoplay, muted=spotlight_autoplay)
-                click_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=True, muted=False)
-                open_original_html = f'<a class="spotlight-open-original-inline" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>'
-
-                if autoplay_embed_url:
-                    if spotlight_autoplay:
-                        spotlight_media_html = f"""
-                        <div class="spotlight-image-wrap spotlight-player-inline spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};">
-                          <iframe src="{html.escape(autoplay_embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
-                        </div>
-                        """
-                    else:
-                        default_play_html = play_html or '<div class="spotlight-play">▶</div>'
-                        poster_html = spotlight_image_html or f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)} spotlight-empty-media" style="aspect-ratio:{html.escape(spotlight_aspect)};">{default_play_html}</div>'
-                        spotlight_media_html = f"""
-                        <button type="button" class="spotlight-inline-trigger" data-src="{html.escape(click_embed_url)}" data-aspect="{html.escape(spotlight_aspect)}" onclick="loadSpotlightInline(this)" aria-label="Play Featured Spotlight">
-                          {poster_html}
-                        </button>
-                        """
-                    spotlight_html = f'<div class="spotlight-card spotlight-inline-card">{spotlight_media_html}{spotlight_copy}{open_original_html}</div>'
-                else:
-                    spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
-                    spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
-            else:
+                spotlight_copy = f'<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
                 spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
-                if safe_spotlight_url and spotlight_behavior == "same_page":
-                    spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
-                elif safe_spotlight_url:
+
+                if safe_spotlight_url:
                     spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
                 else:
                     spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
+
+            # PRO PLAN PUBLIC PROFILE:
+            # Keep the existing full video/thumbnail/autoplay behavior.
+            else:
+                spotlight_behavior = _normalize_spotlight_open_behavior(profile.get("spotlight_open_behavior"))
+                spotlight_autoplay = bool(profile.get("spotlight_autoplay"))
+                spotlight_image_html = ""
+                spotlight_auto_thumb = _spotlight_thumbnail_url(safe_spotlight_url) if safe_spotlight_url else ""
+                play_html = '<div class="spotlight-play">▶</div>' if profile.get("spotlight_show_play") else ""
+
+                if spotlight_image_b64:
+                    spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="data:image/png;base64,{html.escape(spotlight_image_b64)}" alt="Featured Spotlight">{play_html}</div>'
+                elif spotlight_auto_thumb:
+                    spotlight_image_html = f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};"><img src="{html.escape(spotlight_auto_thumb)}" alt="Featured Spotlight">{play_html}</div>'
+
+                spotlight_copy = f'<div class="spotlight-copy"><div class="spotlight-kicker">Featured</div><h2>{spotlight_headline}</h2>{spotlight_subtext_html}</div>'
+
+                if safe_spotlight_url and spotlight_behavior == "play_page":
+                    autoplay_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=spotlight_autoplay, muted=spotlight_autoplay)
+                    click_embed_url = _spotlight_embed_url(safe_spotlight_url, autoplay=True, muted=False)
+                    open_original_html = f'<a class="spotlight-open-original-inline" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">Open Original</a>'
+
+                    if autoplay_embed_url:
+                        if spotlight_autoplay:
+                            spotlight_media_html = f"""
+                            <div class="spotlight-image-wrap spotlight-player-inline spotlight-shape-{html.escape(spotlight_shape)}" style="aspect-ratio:{html.escape(spotlight_aspect)};">
+                              <iframe src="{html.escape(autoplay_embed_url)}" title="Featured Spotlight" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                            </div>
+                            """
+                        else:
+                            default_play_html = play_html or '<div class="spotlight-play">▶</div>'
+                            poster_html = spotlight_image_html or f'<div class="spotlight-image-wrap spotlight-shape-{html.escape(spotlight_shape)} spotlight-empty-media" style="aspect-ratio:{html.escape(spotlight_aspect)};">{default_play_html}</div>'
+                            spotlight_media_html = f"""
+                            <button type="button" class="spotlight-inline-trigger" data-src="{html.escape(click_embed_url)}" data-aspect="{html.escape(spotlight_aspect)}" onclick="loadSpotlightInline(this)" aria-label="Play Featured Spotlight">
+                              {poster_html}
+                            </button>
+                            """
+                        spotlight_html = f'<div class="spotlight-card spotlight-inline-card">{spotlight_media_html}{spotlight_copy}{open_original_html}</div>'
+                    else:
+                        spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
+                        spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
+                else:
+                    spotlight_inner = f'{spotlight_image_html}{spotlight_copy}'
+                    if safe_spotlight_url and spotlight_behavior == "same_page":
+                        spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}">{spotlight_inner}</a>'
+                    elif safe_spotlight_url:
+                        spotlight_html = f'<a class="spotlight-card" href="{html.escape(safe_spotlight_url)}" target="_blank" rel="noopener">{spotlight_inner}</a>'
+                    else:
+                        spotlight_html = f'<div class="spotlight-card">{spotlight_inner}</div>'
+
 
     lead_capture_html = ""
     if profile.get("lead_capture_enabled"):
@@ -4308,16 +4362,16 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
         <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
-        <div class="free-preview-note">Free Mode preview: Spotlight uses your uploaded image plus a simple clickable destination link. Automatic thumbnails, video playback, autoplay, and advanced media controls are Pro features.</div>
+        <div class="free-preview-note">Free Mode preview: Spotlight uses your uploaded image plus a simple clickable destination link. Automatic thumbnails, video playback, autoplay, and advanced video controls are Pro features.</div>
+        <div class="field">
+          <label>Media Shape</label>
+          <select id="spotlight_media_shape_input" name="spotlight_media_shape">
+            <option value="vertical" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'vertical' else ''}>Vertical / Mobile (9:16)</option>
+            <option value="landscape" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'landscape' else ''}>Landscape / Standard Video (16:9)</option>
+            <option value="square" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'square' else ''}>Square (1:1)</option>
+          </select>
+        </div>
         <div class="pro-feature" data-pro-feature="video-spotlight">
-          <div class="field">
-            <label>Media Shape</label>
-            <select id="spotlight_media_shape_input" name="spotlight_media_shape">
-              <option value="vertical" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'vertical' else ''}>Vertical / Mobile (9:16)</option>
-              <option value="landscape" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'landscape' else ''}>Landscape / Standard Video (16:9)</option>
-              <option value="square" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'square' else ''}>Square (1:1)</option>
-            </select>
-          </div>
           <div class="field">
             <label>Click Behavior</label>
             <select id="spotlight_open_behavior_input" name="spotlight_open_behavior">
@@ -4527,7 +4581,6 @@ function renderLivePreview() {{
         spotlightShowPlay = false;
         spotlightAutoplay = false;
         spotlightOpenBehavior = "new_tab";
-        spotlightMediaShape = "vertical";
     }}
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
