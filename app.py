@@ -4221,6 +4221,13 @@ input[type="range"] {{ width:100%; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
 .toggle-row {{ display:flex; align-items:center; gap:10px; font-weight:800; margin-bottom:14px; }}
 .toggle-row input {{ width:auto; }}
+.editor-modal-overlay {{ display:none; position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.55); align-items:center; justify-content:center; padding:20px; }}
+.editor-modal-overlay.show {{ display:flex; }}
+.editor-modal-card {{ width:100%; max-width:430px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,0.26); position:relative; }}
+.editor-modal-card h2 {{ margin:0 0 10px; font-size:24px; }}
+.editor-modal-card p {{ margin:0; color:#444; line-height:1.45; font-size:15px; }}
+.editor-modal-close {{ position:absolute; top:12px; right:12px; width:36px; height:36px; border:none; border-radius:999px; background:#f1f1f1; color:#111; font-size:24px; line-height:1; cursor:pointer; }}
+.editor-modal-ok {{ width:100%; margin-top:18px; padding:13px; border:none; border-radius:12px; background:#111; color:#fff; font-size:15px; font-weight:900; cursor:pointer; }}
 {_app_nav_css()}
 @media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} }}
 </style>
@@ -4296,6 +4303,14 @@ input[type="range"] {{ width:100%; }}
         <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
         <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Inside Spotlight Card</label>
         <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play Inside Spotlight Card keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
+        <div id="instagram_autoplay_notice_modal" class="editor-modal-overlay" aria-hidden="true">
+          <div class="editor-modal-card">
+            <button type="button" id="instagram_autoplay_notice_close" class="editor-modal-close" aria-label="Close">×</button>
+            <h2>Instagram Notice</h2>
+            <p>Instagram may restrict autoplay and embedded playback on some devices and browsers. Your Spotlight will still work, but autoplay behavior may vary.</p>
+            <button type="button" id="instagram_autoplay_notice_ok" class="editor-modal-ok">Got It</button>
+          </div>
+        </div>
       </div>
       <div class="panel">
         <h2>Header Text & Contact Button</h2>
@@ -4353,6 +4368,33 @@ function spotlightThumbnailProxyUrl(value) {{
     const href = safeUrl(value);
     if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return "";
     return "/api/spotlight-thumbnail-image?url=" + encodeURIComponent(href);
+}}
+let instagramSpotlightNoticeShown = false;
+function isInstagramUrl(value) {{
+    return /(^|\.)instagram\.com/i.test(String(value || ""));
+}}
+function showInstagramAutoplayNotice() {{
+    const modal = getEl("instagram_autoplay_notice_modal");
+    if (!modal) {{
+        alert("Instagram may restrict autoplay and embedded playback on some devices and browsers. Your Spotlight will still work, but autoplay behavior may vary.");
+        return;
+    }}
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+}}
+function hideInstagramAutoplayNotice() {{
+    const modal = getEl("instagram_autoplay_notice_modal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+}}
+function maybeShowInstagramAutoplayNotice() {{
+    const urlInput = getEl("spotlight_url_input");
+    const url = urlInput ? urlInput.value : "";
+    if (!instagramSpotlightNoticeShown && isInstagramUrl(url)) {{
+        instagramSpotlightNoticeShown = true;
+        showInstagramAutoplayNotice();
+    }}
 }}
 function readImageFile(input, callback) {{
     if (!input || !input.files || !input.files[0]) return;
@@ -4545,7 +4587,28 @@ if (spotlightPlayInput) {{
 }}
 const spotlightAutoplayInput = getEl("spotlight_autoplay_input");
 if (spotlightAutoplayInput) {{
-    spotlightAutoplayInput.addEventListener("change", renderLivePreview);
+    spotlightAutoplayInput.addEventListener("change", function() {{
+        renderLivePreview();
+        maybeShowInstagramAutoplayNotice();
+    }});
+}}
+const spotlightUrlInputForNotice = getEl("spotlight_url_input");
+if (spotlightUrlInputForNotice) {{
+    ["input", "paste", "change"].forEach(function(evtName) {{
+        spotlightUrlInputForNotice.addEventListener(evtName, function() {{
+            window.setTimeout(maybeShowInstagramAutoplayNotice, 0);
+        }});
+    }});
+}}
+const instagramNoticeClose = getEl("instagram_autoplay_notice_close");
+const instagramNoticeOk = getEl("instagram_autoplay_notice_ok");
+const instagramNoticeModal = getEl("instagram_autoplay_notice_modal");
+if (instagramNoticeClose) instagramNoticeClose.addEventListener("click", hideInstagramAutoplayNotice);
+if (instagramNoticeOk) instagramNoticeOk.addEventListener("click", hideInstagramAutoplayNotice);
+if (instagramNoticeModal) {{
+    instagramNoticeModal.addEventListener("click", function(e) {{
+        if (e.target === instagramNoticeModal) hideInstagramAutoplayNotice();
+    }});
 }}
 const spotlightMediaShapeInput = getEl("spotlight_media_shape_input");
 if (spotlightMediaShapeInput) {{
