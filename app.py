@@ -31,6 +31,17 @@ def _buttn_logo_html(version="white", class_name="buttn-brand-logo", alt="BUTTN"
 TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "").strip()
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "").strip()
 
+# -----------------------------
+# STRIPE / BUTTN PRO SETTINGS
+# -----------------------------
+# These IDs are intentionally kept as defaults so the app works with the
+# Stripe product and price you provided. Railway environment variables can
+# override them later without changing this file.
+STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID", "price_1Tksg0LsMfpRkC1z5MxBG7HD").strip()
+STRIPE_PRO_PRODUCT_ID = os.environ.get("STRIPE_PRO_PRODUCT_ID", "prod_UkNQPhy4O10vsf").strip()
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+
+
 
 def verify_turnstile_response(token, remote_ip=None):
     """
@@ -2189,6 +2200,9 @@ def _dashboard_page(message="", url_message=""):
     profile_count = len(rows)
     profile_limit = MAX_ACCOUNT_PROFILES
     profile_count_text = f"Profiles: {profile_count} / {profile_limit}"
+    account_type = _current_user_account_type() if "_current_user_account_type" in globals() else "free"
+    plan_label = "BUTTN Pro" if account_type == "pro" else "Free"
+    upgrade_html = "" if account_type == "pro" else '<a class="upgrade-btn" href="/account/upgrade">Upgrade to Pro</a>'
     is_first_profile = profile_count == 0
 
     profile_rows = ""
@@ -2265,6 +2279,7 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-actions {{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }}
 .profile-actions a {{ background:#f2f4f7; border-radius:999px; padding:8px 11px; text-decoration:none; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
+.upgrade-btn {{ display:inline-block; margin-top:12px; margin-left:10px; padding:12px 16px; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:900; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
 .url-message, .limit-message {{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
 .account-stats {{ margin-top:8px; color:#555; font-weight:800; }}
@@ -2286,7 +2301,7 @@ input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5
     .profile-actions {{ justify-content:flex-start; }}
 }}
 </style></head><body>{_app_nav_html()}<div class="wrap">
-  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">{profile_count_text}</div>{message_html}<a href="/logout">Log out</a></div>
+  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">Plan: {plan_label} &nbsp; • &nbsp; {profile_count_text}</div>{message_html}<a href="/logout">Log out</a>{upgrade_html}</div>
   <div class="card">
     <div class="profile-card-head"><h2>My Profiles</h2>{create_form_html}</div>
     {profile_rows}
@@ -2382,6 +2397,108 @@ def logout():
 @app.route("/account")
 def account_dashboard():
     return _dashboard_page()
+
+
+def _current_user_account_type():
+    user_id = _current_user_id()
+    if engine is None or not user_id:
+        return "free"
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT account_type FROM users WHERE id = :user_id"), {"user_id": user_id}).first()
+        return (row[0] if row and row[0] else "free").strip().lower()
+    except Exception:
+        return "free"
+
+
+def _set_current_user_pro():
+    user_id = _current_user_id()
+    if engine is None or not user_id:
+        return False
+    try:
+        init_database()
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE users SET account_type = 'pro' WHERE id = :user_id"), {"user_id": user_id})
+        return True
+    except Exception:
+        return False
+
+
+def _app_absolute_url(path):
+    root = (request.url_root or "").rstrip("/")
+    if not path.startswith("/"):
+        path = "/" + path
+    return root + path
+
+
+def _create_stripe_checkout_session(user_id, user_email):
+    if not STRIPE_SECRET_KEY:
+        return None, "Stripe secret key is missing. Add STRIPE_SECRET_KEY in Railway."
+    if not STRIPE_PRO_PRICE_ID:
+        return None, "Stripe price ID is missing."
+
+    payload = {
+        "mode": "subscription",
+        "line_items[0][price]": STRIPE_PRO_PRICE_ID,
+        "line_items[0][quantity]": "1",
+        "success_url": _app_absolute_url("/account/billing/success?session_id={CHECKOUT_SESSION_ID}"),
+        "cancel_url": _app_absolute_url("/account/billing/cancel"),
+        "client_reference_id": str(user_id),
+        "customer_email": user_email or "",
+        "metadata[user_id]": str(user_id),
+        "metadata[product_id]": STRIPE_PRO_PRODUCT_ID,
+    }
+
+    data = urllib.parse.urlencode(payload).encode("utf-8")
+    auth = base64.b64encode((STRIPE_SECRET_KEY + ":").encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        "https://api.stripe.com/v1/checkout/sessions",
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": "Basic " + auth,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        checkout_url = result.get("url") or ""
+        if not checkout_url:
+            return None, "Stripe did not return a checkout URL."
+        return checkout_url, ""
+    except Exception as exc:
+        return None, "Stripe checkout could not be created: " + str(exc)
+
+
+@app.route("/account/upgrade")
+def account_upgrade():
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect("/login")
+
+    checkout_url, error = _create_stripe_checkout_session(user_id, _current_user_email())
+    if not checkout_url:
+        return _dashboard_page(message=error or "Stripe checkout could not be created.")
+
+    return redirect(checkout_url)
+
+
+@app.route("/account/billing/success")
+def account_billing_success():
+    if not _current_user_id():
+        return redirect("/login")
+    _set_current_user_pro()
+    return _dashboard_page(message="Your BUTTN Pro plan is active.")
+
+
+@app.route("/account/billing/cancel")
+def account_billing_cancel():
+    if not _current_user_id():
+        return redirect("/login")
+    return _dashboard_page(message="Checkout was canceled. Your account is still on the free plan.")
 
 
 def _db_profile_exists(username):
