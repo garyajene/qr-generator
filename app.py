@@ -4308,7 +4308,7 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
         <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
-        <div class="free-preview-note">Free Mode preview: Spotlight image, headline, subtext, and destination link stay available. Video playback, autoplay, and advanced media controls are Pro features.</div>
+        <div class="free-preview-note">Free Mode preview: Spotlight uses your uploaded image plus a simple clickable destination link. Automatic thumbnails, video playback, autoplay, and advanced media controls are Pro features.</div>
         <div class="pro-feature" data-pro-feature="video-spotlight">
           <div class="field">
             <label>Media Shape</label>
@@ -4548,15 +4548,15 @@ function renderLivePreview() {{
     if (spotlightEnabled && ((spotlightHeadline || "").trim() || liveSpotlightImageData || (spotlightUrl || "").trim())) {{
         const mediaShape = ["vertical", "landscape", "square"].includes(spotlightMediaShape) ? spotlightMediaShape : "vertical";
         const aspect = mediaShape === "landscape" ? "16 / 9" : (mediaShape === "square" ? "1 / 1" : "9 / 16");
-        const autoThumbnailUrl = spotlightThumbnailProxyUrl(spotlightUrl);
+        const autoThumbnailUrl = isFreePlanPreview ? "" : spotlightThumbnailProxyUrl(spotlightUrl);
         const spotlightImage = liveSpotlightImageData
             ? `<div class="spotlight-image-wrap spotlight-shape-${{mediaShape}}" style="aspect-ratio:${{aspect}};"><img src="data:image/png;base64,${{liveSpotlightImageData}}" alt="Featured Spotlight">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>`
             : (autoThumbnailUrl ? `<div class="spotlight-image-wrap spotlight-shape-${{mediaShape}}" style="aspect-ratio:${{aspect}};"><img src="${{escapeHtml(autoThumbnailUrl)}}" alt="Featured Spotlight" onerror="this.closest('.spotlight-image-wrap').style.display='none';">${{spotlightShowPlay ? '<div class="spotlight-play">▶</div>' : ''}}</div>` : "");
         const spotlightSubtextHtml = (spotlightSubtext || "").trim()
             ? `<div class="spotlight-subtext">${{escapeHtml(spotlightSubtext)}}</div>`
             : "";
-        const behaviorLabel = spotlightOpenBehavior === "play_page" ? "Plays in card" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab");
-        const autoplayLabel = spotlightAutoplay ? " • Autoplay" : "";
+        const behaviorLabel = isFreePlanPreview ? "Link only" : (spotlightOpenBehavior === "play_page" ? "Plays in card" : (spotlightOpenBehavior === "same_page" ? "Same page" : "New tab"));
+        const autoplayLabel = (!isFreePlanPreview && spotlightAutoplay) ? " • Autoplay" : "";
         const spotlightInner = `${{spotlightImage}}<div class="spotlight-copy"><div class="spotlight-kicker">Featured • ${{behaviorLabel}}${{autoplayLabel}}</div><h2>${{escapeHtml(spotlightHeadline || "Featured")}}</h2>${{spotlightSubtextHtml}}</div>`;
         const href = safeUrl(spotlightUrl);
         spotlightHtml = href
