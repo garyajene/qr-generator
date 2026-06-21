@@ -4221,6 +4221,20 @@ input[type="range"] {{ width:100%; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
 .toggle-row {{ display:flex; align-items:center; gap:10px; font-weight:800; margin-bottom:14px; }}
 .toggle-row input {{ width:auto; }}
+.plan-preview-panel {{ background:#111; color:#fff; border-radius:18px; padding:16px 18px; margin:18px 0 22px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; box-shadow:0 8px 24px rgba(0,0,0,0.12); }}
+.plan-preview-panel strong {{ font-size:15px; }}
+.plan-preview-panel span {{ color:rgba(255,255,255,0.72); font-size:13px; }}
+.plan-preview-buttons {{ display:flex; gap:8px; flex-wrap:wrap; }}
+.plan-preview-btn {{ border:1px solid rgba(255,255,255,0.35); background:rgba(255,255,255,0.10); color:#fff; border-radius:999px; padding:9px 14px; font-weight:900; cursor:pointer; margin:0; }}
+.plan-preview-btn.active {{ background:#fff; color:#111; }}
+.pro-feature {{ position:relative; }}
+body[data-plan-preview="free"] .pro-feature {{ opacity:.46; filter:grayscale(0.2); }}
+body[data-plan-preview="free"] .pro-feature input,
+body[data-plan-preview="free"] .pro-feature select,
+body[data-plan-preview="free"] .pro-feature button {{ pointer-events:none; }}
+body[data-plan-preview="free"] .pro-feature::after {{ content:"🔒 PRO"; position:absolute; top:8px; right:8px; background:#111; color:#fff; border-radius:999px; padding:5px 9px; font-size:11px; font-weight:900; letter-spacing:.04em; }}
+.free-preview-note {{ display:none; background:#fff7e6; color:#6b4300; border:1px solid #f0d399; border-radius:12px; padding:10px 12px; font-size:13px; font-weight:800; margin-bottom:12px; }}
+body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
 .editor-modal-overlay {{ display:none; position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.55); align-items:center; justify-content:center; padding:20px; }}
 .editor-modal-overlay.show {{ display:flex; }}
 .editor-modal-card {{ width:100%; max-width:430px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,0.26); position:relative; }}
@@ -4238,6 +4252,16 @@ input[type="range"] {{ width:100%; }}
   <div class="builder-head">
     <h1>Create Your BUTTN Profile</h1>
     <p>Set up the page your QR code and NFC button will point to.</p>
+  </div>
+  <div class="plan-preview-panel" aria-label="Temporary plan preview">
+    <div>
+      <strong>Temporary Plan Preview</strong><br>
+      <span>Switch views while building. This is for testing only and does not change billing.</span>
+    </div>
+    <div class="plan-preview-buttons">
+      <button type="button" class="plan-preview-btn" data-plan-preview-btn="free">Free Mode</button>
+      <button type="button" class="plan-preview-btn" data-plan-preview-btn="pro">Pro Mode</button>
+    </div>
   </div>
   <div class="builder-grid">
     <form method="post" enctype="multipart/form-data">
@@ -4284,25 +4308,28 @@ input[type="range"] {{ width:100%; }}
         <div class="field"><label>Headline</label><input id="spotlight_headline_input" type="text" name="spotlight_headline" value="{val('spotlight_headline', '')}" placeholder="New Drop Available"></div>
         <div class="field"><label>Optional Subtext</label><input id="spotlight_subtext_input" type="text" name="spotlight_subtext" value="{val('spotlight_subtext', '')}" placeholder="Tap to shop, book, watch, or learn more."></div>
         <div class="field"><label>Destination Link</label><input id="spotlight_url_input" type="text" name="spotlight_url" value="{val('spotlight_url', '')}" placeholder="https://example.com"></div>
-        <div class="field">
-          <label>Media Shape</label>
-          <select id="spotlight_media_shape_input" name="spotlight_media_shape">
-            <option value="vertical" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'vertical' else ''}>Vertical / Mobile (9:16)</option>
-            <option value="landscape" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'landscape' else ''}>Landscape / Standard Video (16:9)</option>
-            <option value="square" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'square' else ''}>Square (1:1)</option>
-          </select>
+        <div class="free-preview-note">Free Mode preview: Spotlight image, headline, subtext, and destination link stay available. Video playback, autoplay, and advanced media controls are Pro features.</div>
+        <div class="pro-feature" data-pro-feature="video-spotlight">
+          <div class="field">
+            <label>Media Shape</label>
+            <select id="spotlight_media_shape_input" name="spotlight_media_shape">
+              <option value="vertical" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'vertical' else ''}>Vertical / Mobile (9:16)</option>
+              <option value="landscape" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'landscape' else ''}>Landscape / Standard Video (16:9)</option>
+              <option value="square" {'selected' if _normalize_spotlight_media_shape(profile.get('spotlight_media_shape')) == 'square' else ''}>Square (1:1)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Click Behavior</label>
+            <select id="spotlight_open_behavior_input" name="spotlight_open_behavior">
+              <option value="new_tab" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'new_tab' else ''}>Open in New Tab</option>
+              <option value="same_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'same_page' else ''}>Open on Same Page</option>
+              <option value="play_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'play_page' else ''}>Play Inside Spotlight Card</option>
+            </select>
+          </div>
+          <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
+          <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Inside Spotlight Card</label>
+          <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play Inside Spotlight Card keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
         </div>
-        <div class="field">
-          <label>Click Behavior</label>
-          <select id="spotlight_open_behavior_input" name="spotlight_open_behavior">
-            <option value="new_tab" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'new_tab' else ''}>Open in New Tab</option>
-            <option value="same_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'same_page' else ''}>Open on Same Page</option>
-            <option value="play_page" {'selected' if _normalize_spotlight_open_behavior(profile.get('spotlight_open_behavior')) == 'play_page' else ''}>Play Inside Spotlight Card</option>
-          </select>
-        </div>
-        <label class="toggle-row"><input id="spotlight_show_play_input" type="checkbox" name="spotlight_show_play" {'checked' if profile.get('spotlight_show_play') else ''}> Show Play Button Overlay</label>
-        <label class="toggle-row"><input id="spotlight_autoplay_input" type="checkbox" name="spotlight_autoplay" {'checked' if profile.get('spotlight_autoplay') else ''}> Autoplay Inside Spotlight Card</label>
-        <div class="small-help">Autoplay works best with Play on Page and supported embeds. Vertical is best for TikTok, Instagram Reels, Snapchat, and YouTube Shorts. Landscape is best for standard YouTube. Play Inside Spotlight Card keeps visitors inside the BUTTN profile when the platform allows embedding.</div>
         <div id="instagram_autoplay_notice_modal" class="editor-modal-overlay" aria-hidden="true">
           <div class="editor-modal-card">
             <button type="button" id="instagram_autoplay_notice_close" class="editor-modal-close" aria-label="Close">×</button>
@@ -4347,6 +4374,29 @@ const iconOptions = {json.dumps({key: {"label": data["label"], "svg": SVG_ICON_M
 let liveLogoData = existingLogoData;
 let liveHeaderImageData = existingHeaderImageData;
 let liveSpotlightImageData = existingSpotlightImageData;
+
+function getCurrentPlanPreview() {{
+    return document.body.getAttribute("data-plan-preview") || "pro";
+}}
+function setPlanPreview(mode) {{
+    const cleanMode = mode === "free" ? "free" : "pro";
+    document.body.setAttribute("data-plan-preview", cleanMode);
+    try {{ localStorage.setItem("buttn_plan_preview_mode", cleanMode); }} catch (err) {{}}
+    document.querySelectorAll("[data-plan-preview-btn]").forEach(function(btn) {{
+        btn.classList.toggle("active", btn.getAttribute("data-plan-preview-btn") === cleanMode);
+    }});
+    renderLivePreview();
+}}
+function initPlanPreview() {{
+    let saved = "pro";
+    try {{ saved = localStorage.getItem("buttn_plan_preview_mode") || "pro"; }} catch (err) {{}}
+    setPlanPreview(saved === "free" ? "free" : "pro");
+    document.querySelectorAll("[data-plan-preview-btn]").forEach(function(btn) {{
+        btn.addEventListener("click", function() {{
+            setPlanPreview(btn.getAttribute("data-plan-preview-btn"));
+        }});
+    }});
+}}
 
 function getEl(id) {{ return document.getElementById(id); }}
 function getVal(id, fallback) {{ const el = getEl(id); return el ? (el.value || fallback || "") : (fallback || ""); }}
@@ -4468,10 +4518,17 @@ function renderLivePreview() {{
     const spotlightHeadline = getVal("spotlight_headline_input", "");
     const spotlightSubtext = getVal("spotlight_subtext_input", "");
     const spotlightUrl = getVal("spotlight_url_input", "");
-    const spotlightShowPlay = !!(getEl("spotlight_show_play_input") && getEl("spotlight_show_play_input").checked);
-    const spotlightAutoplay = !!(getEl("spotlight_autoplay_input") && getEl("spotlight_autoplay_input").checked);
-    const spotlightMediaShape = getVal("spotlight_media_shape_input", "vertical");
-    const spotlightOpenBehavior = getVal("spotlight_open_behavior_input", "new_tab");
+    const isFreePlanPreview = getCurrentPlanPreview() === "free";
+    let spotlightShowPlay = !!(getEl("spotlight_show_play_input") && getEl("spotlight_show_play_input").checked);
+    let spotlightAutoplay = !!(getEl("spotlight_autoplay_input") && getEl("spotlight_autoplay_input").checked);
+    let spotlightMediaShape = getVal("spotlight_media_shape_input", "vertical");
+    let spotlightOpenBehavior = getVal("spotlight_open_behavior_input", "new_tab");
+    if (isFreePlanPreview) {{
+        spotlightShowPlay = false;
+        spotlightAutoplay = false;
+        spotlightOpenBehavior = "new_tab";
+        spotlightMediaShape = "vertical";
+    }}
     const opacityRaw = parseInt(getVal("header_image_opacity_input", "35"), 10);
     const opacity = Math.max(0, Math.min(100, isNaN(opacityRaw) ? 35 : opacityRaw)) / 100;
     const initial = escapeHtml((name || "B").trim().charAt(0).toUpperCase() || "B");
@@ -4671,7 +4728,7 @@ if (clearSpotlightImageBtn) {{
         renderLivePreview();
     }});
 }}
-renderLivePreview();
+initPlanPreview();
 </script>
 </body>
 </html>
