@@ -19,6 +19,15 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 app.secret_key = os.environ.get("SECRET_KEY", "buttn-dev-secret-change-later")
 
+
+BUTTN_LOGO_WHITE_FILE = "/static/buttn_logo_wht.png"
+BUTTN_LOGO_BLACK_FILE = "/static/buttn_logo_blk.png"
+
+
+def _buttn_logo_html(version="white", class_name="buttn-brand-logo", alt="BUTTN"):
+    logo_src = BUTTN_LOGO_WHITE_FILE if (version or "white").lower() == "white" else BUTTN_LOGO_BLACK_FILE
+    return f'<img class="{html.escape(class_name)}" src="{html.escape(logo_src)}" alt="{html.escape(alt)}">'
+
 TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "").strip()
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "").strip()
 
@@ -2037,9 +2046,22 @@ def _app_nav_css():
     flex-wrap: wrap;
 }
 .buttn-admin-brand {
-    font-weight: 900;
-    letter-spacing: 0.04em;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    line-height: 1;
+}
+.buttn-admin-brand-logo {
+    height: 30px;
+    width: auto;
+    display: block;
+}
+.buttn-footer-logo {
+    height: 18px;
+    width: auto;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 4px;
 }
 .buttn-admin-links {
     display: flex;
@@ -2096,7 +2118,7 @@ def _app_nav_html(username=None):
     return f"""
 <div class="buttn-admin-nav">
   <div class="buttn-admin-nav-inner">
-    <div class="buttn-admin-brand">BUTTN</div>
+    <a class="buttn-admin-brand" href="/account" aria-label="BUTTN Home">{_buttn_logo_html("white", "buttn-admin-brand-logo")}</a>
     <div class="buttn-admin-links">{''.join(links)}</div>
   </div>
 </div>
@@ -3650,7 +3672,7 @@ body {{ margin:0; font-family:Arial,sans-serif; background:{safe_page_bg}; color
     <div id="copy_status" class="copy-status"></div>
     <a class="back-link" href="/{html.escape(username)}">Back to Profile</a>
   </div>
-  <div class="buttn-footer">Powered by BUTTN</div>
+  <div class="buttn-footer">Powered by {_buttn_logo_html("black", "buttn-footer-logo")}</div>
 </div>
 <script>
 function copyText(value) {{
@@ -3946,7 +3968,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
     </div>
   </div>
   <div class="links-area">{spotlight_html}{links_html}{lead_capture_html}</div>
-  <div class="buttn-footer">Powered by BUTTN</div>
+  <div class="buttn-footer">Powered by {_buttn_logo_html("black", "buttn-footer-logo")}</div>
 </div>
 {spotlight_player_modal_html}
 <script>
@@ -4666,7 +4688,7 @@ function renderLivePreview() {{
     </div>
   </div>
   <div class="links-area">${{spotlightHtml}}${{collectLinks()}}${{leadCaptureEnabled ? `<div class="lead-capture-card"><h2>${{escapeHtml(leadHeadline)}}</h2><form><input type="text" placeholder="Your name"><input type="email" placeholder="Your email" required><input type="tel" placeholder="Phone (optional)"><button type="button">${{escapeHtml(leadButtonText)}}</button></form></div>` : ""}}</div>
-  <div class="buttn-footer">Powered by BUTTN</div>
+  <div class="buttn-footer">Powered by {_buttn_logo_html("black", "buttn-footer-logo")}</div>
 </div>`;
 }}
 
