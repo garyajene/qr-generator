@@ -116,6 +116,16 @@ def init_database():
         """))
 
         conn.execute(text("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profiles (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -2200,9 +2210,11 @@ def _dashboard_page(message="", url_message=""):
     profile_count = len(rows)
     profile_limit = MAX_ACCOUNT_PROFILES
     profile_count_text = f"Profiles: {profile_count} / {profile_limit}"
-    account_type = _current_user_account_type() if "_current_user_account_type" in globals() else "free"
-    plan_label = "BUTTN Pro" if account_type == "pro" else "Free"
+    plan_status = _current_user_plan_status() if "_current_user_plan_status" in globals() else {"account_type": "free", "plan_label": "Free", "has_pro_access": False}
+    account_type = plan_status.get("account_type", "free")
+    plan_label = plan_status.get("plan_label", "Free")
     upgrade_html = "" if account_type == "pro" else '<a class="upgrade-btn" href="/account/upgrade">Upgrade to Pro</a>'
+    trial_banner_html = _trial_banner_html(plan_status) if "_trial_banner_html" in globals() else ""
     is_first_profile = profile_count == 0
 
     profile_rows = ""
@@ -2280,6 +2292,7 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-actions a {{ background:#f2f4f7; border-radius:999px; padding:8px 11px; text-decoration:none; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 .upgrade-btn {{ display:inline-block; margin-top:12px; margin-left:10px; padding:12px 16px; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:900; }}
+.trial-banner {{ margin-top:16px; padding:13px 14px; border-radius:14px; background:#111; color:#fff; font-weight:900; line-height:1.35; }}
 .danger-card {{ border-color:#f0caca; }}
 .danger-title {{ color:#8a1f1f; margin:0 0 8px; }}
 .danger-text {{ color:#555; line-height:1.45; }}
@@ -2305,7 +2318,7 @@ input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5
     .profile-actions {{ justify-content:flex-start; }}
 }}
 </style></head><body>{_app_nav_html()}<div class="wrap">
-  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">Plan: {plan_label} &nbsp; • &nbsp; {profile_count_text}</div>{message_html}<a href="/logout">Log out</a>{upgrade_html}</div>
+  <div class="card"><h1>My BUTTN Account</h1><div class="muted">Signed in as {safe_email}</div><div class="account-stats">Plan: {plan_label} &nbsp; • &nbsp; {profile_count_text}</div>{trial_banner_html}{message_html}<a href="/logout">Log out</a>{upgrade_html}</div>
   <div class="card">
     <div class="profile-card-head"><h2>My Profiles</h2>{create_form_html}</div>
     {profile_rows}
@@ -2365,8 +2378,8 @@ def register():
             password_hash = generate_password_hash(password)
             with engine.begin() as conn:
                 user = conn.execute(text("""
-                    INSERT INTO users (email, password_hash, account_type)
-                    VALUES (:email, :password_hash, 'free')
+                    INSERT INTO users (email, password_hash, account_type, trial_started_at, trial_ends_at)
+                    VALUES (:email, :password_hash, 'trial', NOW(), NOW() + INTERVAL '30 days')
                     RETURNING id, email
                 """), {"email": email, "password_hash": password_hash}).mappings().one()
             session["user_id"] = user["id"]
@@ -2436,17 +2449,129 @@ def account_delete():
         return _dashboard_page(message="Account could not be deleted. Please try again.")
 
 
-def _current_user_account_type():
-    user_id = _current_user_id()
+def _normalize_account_type(value):
+    value = (value or "free").strip().lower()
+    return value if value in {"free", "trial", "pro"} else "free"
+
+
+def _account_status_for_user(user_id):
+    """
+    Return the effective account status for a user.
+    Trial users keep Pro access until trial_ends_at. Once expired, the account
+    is safely downgraded to free before the status is returned.
+    """
+    status = {
+        "account_type": "free",
+        "plan_label": "Free",
+        "has_pro_access": False,
+        "trial_days_left": 0,
+        "trial_active": False,
+        "trial_expired": False,
+    }
+
     if engine is None or not user_id:
-        return "free"
+        return status
+
     try:
         init_database()
-        with engine.connect() as conn:
-            row = conn.execute(text("SELECT account_type FROM users WHERE id = :user_id"), {"user_id": user_id}).first()
-        return (row[0] if row and row[0] else "free").strip().lower()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                SELECT
+                    account_type,
+                    created_at,
+                    trial_started_at,
+                    trial_ends_at,
+                    CASE
+                        WHEN trial_ends_at IS NULL THEN 0
+                        ELSE GREATEST(0, CEIL(EXTRACT(EPOCH FROM (trial_ends_at - NOW())) / 86400.0))::INT
+                    END AS trial_days_left,
+                    CASE
+                        WHEN trial_ends_at IS NOT NULL AND trial_ends_at <= NOW() THEN TRUE
+                        ELSE FALSE
+                    END AS trial_expired
+                FROM users
+                WHERE id = :user_id
+            """), {"user_id": user_id}).mappings().first()
+
+            if not row:
+                return status
+
+            account_type = _normalize_account_type(row.get("account_type"))
+            trial_expired = bool(row.get("trial_expired"))
+            trial_days_left = int(row.get("trial_days_left") or 0)
+
+            if account_type == "trial" and trial_expired:
+                conn.execute(text("""
+                    UPDATE users
+                    SET account_type = 'free'
+                    WHERE id = :user_id AND account_type = 'trial'
+                """), {"user_id": user_id})
+                account_type = "free"
+                trial_days_left = 0
+
+            if account_type == "pro":
+                status.update({
+                    "account_type": "pro",
+                    "plan_label": "BUTTN Pro",
+                    "has_pro_access": True,
+                    "trial_days_left": 0,
+                    "trial_active": False,
+                    "trial_expired": False,
+                })
+            elif account_type == "trial":
+                status.update({
+                    "account_type": "trial",
+                    "plan_label": "Pro Trial",
+                    "has_pro_access": True,
+                    "trial_days_left": max(0, trial_days_left),
+                    "trial_active": True,
+                    "trial_expired": False,
+                })
+            else:
+                status.update({
+                    "account_type": "free",
+                    "plan_label": "Free",
+                    "has_pro_access": False,
+                    "trial_days_left": 0,
+                    "trial_active": False,
+                    "trial_expired": trial_expired,
+                })
+
+        return status
     except Exception:
-        return "free"
+        return status
+
+
+def _current_user_plan_status():
+    return _account_status_for_user(_current_user_id())
+
+
+def _current_user_account_type():
+    return _current_user_plan_status().get("account_type", "free")
+
+
+def _current_user_has_pro_access():
+    return bool(_current_user_plan_status().get("has_pro_access"))
+
+
+def _trial_banner_html(status):
+    if not status or not status.get("trial_active"):
+        return ""
+
+    days_left = int(status.get("trial_days_left") or 0)
+
+    if days_left >= 4:
+        message = f"You are on a 30-day BUTTN Pro trial. {days_left} days remaining."
+    elif days_left == 3:
+        message = "You have 3 days left to upgrade to Pro."
+    elif days_left == 2:
+        message = "You have 2 days left to upgrade to Pro."
+    elif days_left == 1:
+        message = "Last day to enjoy all of these Pro features."
+    else:
+        message = "Your Pro trial ends today. Upgrade to Pro to keep your Pro features."
+
+    return f'<div class="trial-banner">{html.escape(message)}</div>'
 
 
 def _set_current_user_pro():
@@ -2456,7 +2581,7 @@ def _set_current_user_pro():
     try:
         init_database()
         with engine.begin() as conn:
-            conn.execute(text("UPDATE users SET account_type = 'pro' WHERE id = :user_id"), {"user_id": user_id})
+            conn.execute(text("UPDATE users SET account_type = 'pro', trial_started_at = COALESCE(trial_started_at, NOW()), trial_ends_at = NULL WHERE id = :user_id"), {"user_id": user_id})
         return True
     except Exception:
         return False
@@ -2535,7 +2660,7 @@ def account_billing_success():
 def account_billing_cancel():
     if not _current_user_id():
         return redirect("/login")
-    return _dashboard_page(message="Checkout was canceled. Your account is still on the free plan.")
+    return _dashboard_page(message="Checkout was canceled. Your account was not upgraded.")
 
 
 def _db_profile_exists(username):
@@ -2564,9 +2689,8 @@ def _db_profile_owner_id(username):
 
 def _db_profile_account_type(username):
     """
-    Return the owning user's account type for a profile.
-    Defaults to free when the profile is database-backed but the plan cannot be verified.
-    Demo/in-memory profiles default to pro so local testing keeps full functionality.
+    Return the owning user's effective account type for a profile.
+    Active trials count as Pro access until the 30-day trial expires.
     """
     if engine is None:
         return "pro"
@@ -2579,18 +2703,44 @@ def _db_profile_account_type(username):
         init_database()
         with engine.connect() as conn:
             row = conn.execute(text("""
-                SELECT COALESCE(users.account_type, 'free') AS account_type
+                SELECT users.id AS user_id
                 FROM profiles
                 LEFT JOIN users ON users.id = profiles.user_id
                 WHERE profiles.username = :username
-            """), {"username": username}).first()
-        return (row[0] if row and row[0] else "free").strip().lower()
+            """), {"username": username}).mappings().first()
+        if not row or not row.get("user_id"):
+            return "free"
+        return _account_status_for_user(row["user_id"]).get("account_type", "free")
     except Exception:
         return "free"
 
 
 def _profile_has_pro_access(username):
-    return _db_profile_account_type(username) == "pro"
+    """
+    Pro subscribers and active trial users both get Pro features.
+    Expired trials are downgraded to Free by _account_status_for_user().
+    """
+    if engine is None:
+        return True
+
+    username = _normalize_buttn_url(username)
+    if not username:
+        return False
+
+    try:
+        init_database()
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT users.id AS user_id
+                FROM profiles
+                LEFT JOIN users ON users.id = profiles.user_id
+                WHERE profiles.username = :username
+            """), {"username": username}).mappings().first()
+        if not row or not row.get("user_id"):
+            return False
+        return bool(_account_status_for_user(row["user_id"]).get("has_pro_access"))
+    except Exception:
+        return False
 
 
 def _user_profile_count(user_id):
