@@ -2280,6 +2280,10 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-actions a {{ background:#f2f4f7; border-radius:999px; padding:8px 11px; text-decoration:none; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 .upgrade-btn {{ display:inline-block; margin-top:12px; margin-left:10px; padding:12px 16px; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:900; }}
+.danger-card {{ border-color:#f0caca; }}
+.danger-title {{ color:#8a1f1f; margin:0 0 8px; }}
+.danger-text {{ color:#555; line-height:1.45; }}
+.delete-account-btn {{ background:#8a1f1f; color:#fff; width:100%; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
 .url-message, .limit-message {{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
 .account-stats {{ margin-top:8px; color:#555; font-weight:800; }}
@@ -2305,6 +2309,15 @@ input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5
   <div class="card">
     <div class="profile-card-head"><h2>My Profiles</h2>{create_form_html}</div>
     {profile_rows}
+  </div>
+  <div class="card danger-card">
+    <h2 class="danger-title">Delete Account</h2>
+    <p class="danger-text">This permanently deletes this account, all profiles, links, analytics, and leads. Type your email to confirm.</p>
+    <form method="post" action="/account/delete" onsubmit="return confirm('Delete this BUTTN account permanently? This cannot be undone.');">
+        <label>Confirm Email</label>
+        <input type="email" name="confirm_email" placeholder="{safe_email}" required>
+        <button type="submit" class="delete-account-btn">Delete Account Permanently</button>
+    </form>
   </div>
 </div>
 <script>
@@ -2397,6 +2410,30 @@ def logout():
 @app.route("/account")
 def account_dashboard():
     return _dashboard_page()
+
+
+@app.route("/account/delete", methods=["POST"])
+def account_delete():
+    user_id = _current_user_id()
+    user_email = (_current_user_email() or "").strip().lower()
+    if not user_id:
+        return redirect("/login")
+
+    confirm_email = (request.form.get("confirm_email") or "").strip().lower()
+    if not confirm_email or confirm_email != user_email:
+        return _dashboard_page(message="Account was not deleted. The confirmation email did not match.")
+
+    if engine is None:
+        return _dashboard_page(message="Account could not be deleted. Database is not connected.")
+
+    try:
+        init_database()
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id})
+        session.clear()
+        return _auth_page("Create Account", "Your BUTTN account has been deleted.")
+    except Exception:
+        return _dashboard_page(message="Account could not be deleted. Please try again.")
 
 
 def _current_user_account_type():
