@@ -2038,6 +2038,436 @@ if (currentBgLabel) {{
 """
 
 
+def render_landing_page():
+    """
+    Public BUTTN marketing homepage.
+
+    This keeps the first landing-page version inside app.py so the deployment
+    stays simple: one full replacement file, no extra template files required.
+    """
+    if session.get("user_id"):
+        primary_cta = '<a class="btn btn-primary" href="/account">Go To My Account</a>'
+        secondary_cta = '<a class="btn btn-secondary" href="/generate">Open QR Generator</a>'
+        nav_cta = '<a class="nav-pill nav-primary" href="/account">My Account</a>'
+    else:
+        primary_cta = '<a class="btn btn-primary" href="/register">Create Your BUTTN</a>'
+        secondary_cta = '<a class="btn btn-secondary" href="/login">Log In</a>'
+        nav_cta = '<a class="nav-pill nav-primary" href="/register">Get Started</a>'
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUTTN | Tap. Scan. Connect.</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f6f4ef;
+    color: #111;
+}}
+a {{ color: inherit; }}
+.page {{
+    min-height: 100vh;
+}}
+.top-nav {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 22px 24px;
+}}
+.brand {{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+}}
+.brand img {{
+    height: 36px;
+    width: auto;
+    display: block;
+}}
+.nav-links {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}}
+.nav-pill {{
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 900;
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.12);
+    background: rgba(255,255,255,0.6);
+}}
+.nav-primary {{
+    background: #111;
+    color: #fff;
+    border-color: #111;
+}}
+.hero {{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 42px 24px 70px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+    gap: 46px;
+    align-items: center;
+}}
+.kicker {{
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(0,0,0,0.12);
+    background: rgba(255,255,255,0.72);
+    border-radius: 999px;
+    padding: 9px 13px;
+    font-weight: 900;
+    font-size: 13px;
+    margin-bottom: 18px;
+}}
+h1 {{
+    margin: 0;
+    font-size: clamp(46px, 7vw, 88px);
+    line-height: 0.9;
+    letter-spacing: -0.075em;
+}}
+.hero-copy {{
+    margin: 22px 0 0;
+    max-width: 610px;
+    font-size: 20px;
+    line-height: 1.45;
+    color: #444;
+}}
+.cta-row {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 30px;
+}}
+.btn {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    padding: 15px 22px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 900;
+    border: 2px solid #111;
+}}
+.btn-primary {{
+    background: #111;
+    color: #fff;
+}}
+.btn-secondary {{
+    background: #fff;
+    color: #111;
+}}
+.trust-row {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 26px;
+    color: #555;
+    font-size: 14px;
+    font-weight: 800;
+}}
+.trust-row span {{
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 999px;
+    padding: 8px 11px;
+}}
+.product-stage {{
+    position: relative;
+    min-height: 520px;
+}}
+.phone-card {{
+    position: relative;
+    max-width: 360px;
+    margin: 0 auto;
+    background: #111;
+    color: #fff;
+    border-radius: 34px;
+    padding: 18px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.22);
+}}
+.phone-screen {{
+    background: #f5f5f5;
+    border-radius: 24px;
+    overflow: hidden;
+    color: #111;
+}}
+.profile-top {{
+    min-height: 230px;
+    background: linear-gradient(135deg, #111, #8d5b4c);
+    padding: 38px 22px 24px;
+    text-align: center;
+    color: #fff;
+}}
+.avatar {{
+    width: 104px;
+    height: 104px;
+    margin: 0 auto 14px;
+    border-radius: 999px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 4px solid rgba(255,255,255,0.75);
+}}
+.avatar img {{
+    max-width: 78px;
+    width: 78px;
+    height: auto;
+}}
+.profile-name {{
+    font-size: 23px;
+    font-weight: 900;
+}}
+.profile-sub {{
+    margin-top: 5px;
+    font-size: 14px;
+    opacity: 0.78;
+}}
+.link-stack {{
+    padding: 22px 18px 24px;
+}}
+.fake-link {{
+    background: #fff;
+    border: 2px solid #e1e4ea;
+    border-radius: 15px;
+    padding: 14px;
+    margin-bottom: 12px;
+    text-align: center;
+    font-weight: 900;
+}}
+.qr-card {{
+    position: absolute;
+    left: 0;
+    bottom: 16px;
+    width: 170px;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 22px;
+    padding: 16px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.18);
+    transform: rotate(-5deg);
+}}
+.qr-grid {{
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+}}
+.qr-grid i {{
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: #111;
+}}
+.qr-grid i:nth-child(3n) {{
+    background: transparent;
+}}
+.dome-card {{
+    position: absolute;
+    right: 4px;
+    top: 26px;
+    width: 146px;
+    height: 146px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 32% 25%, #fff, #111 38%, #000 72%);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.20);
+    border: 8px solid #fff;
+}}
+.sections {{
+    background: #fff;
+    border-top: 1px solid rgba(0,0,0,0.08);
+}}
+.section-inner {{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 66px 24px;
+}}
+.section-title {{
+    margin: 0 0 14px;
+    font-size: clamp(32px, 4vw, 52px);
+    line-height: 1;
+    letter-spacing: -0.05em;
+}}
+.section-copy {{
+    margin: 0;
+    max-width: 720px;
+    color: #555;
+    font-size: 18px;
+    line-height: 1.45;
+}}
+.card-grid {{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 16px;
+    margin-top: 30px;
+}}
+.info-card {{
+    background: #f6f4ef;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 22px;
+    padding: 24px;
+}}
+.info-card h3 {{
+    margin: 0 0 9px;
+    font-size: 22px;
+}}
+.info-card p {{
+    margin: 0;
+    color: #555;
+    line-height: 1.45;
+}}
+.final-cta {{
+    background: #111;
+    color: #fff;
+    text-align: center;
+}}
+.final-cta .section-inner {{
+    padding-top: 70px;
+    padding-bottom: 76px;
+}}
+.final-cta p {{
+    color: rgba(255,255,255,0.72);
+    margin-left: auto;
+    margin-right: auto;
+}}
+.final-cta .btn-secondary {{
+    border-color: #fff;
+}}
+@media (max-width: 860px) {{
+    .top-nav {{
+        align-items: flex-start;
+        flex-direction: column;
+    }}
+    .hero {{
+        grid-template-columns: 1fr;
+        padding-top: 24px;
+    }}
+    .product-stage {{
+        min-height: 470px;
+    }}
+    .qr-card {{
+        left: 8px;
+        bottom: 0;
+    }}
+    .dome-card {{
+        right: 12px;
+    }}
+    .card-grid {{
+        grid-template-columns: 1fr;
+    }}
+}}
+</style>
+</head>
+<body>
+<div class="page">
+    <header class="top-nav">
+        <a class="brand" href="/" aria-label="BUTTN Home">{_buttn_logo_html("black", "buttn-landing-logo")}</a>
+        <nav class="nav-links">
+            <a class="nav-pill" href="/login">Log In</a>
+            <a class="nav-pill" href="/generate">QR Generator</a>
+            {nav_cta}
+        </nav>
+    </header>
+
+    <main class="hero">
+        <section>
+            <div class="kicker">QR + NFC + link page for modern brands</div>
+            <h1>Tap. Scan. Connect. Instantly.</h1>
+            <p class="hero-copy">BUTTN turns your QR code and NFC button into a simple branded profile page for your business, content, products, links, leads, and contact info.</p>
+            <div class="cta-row">
+                {primary_cta}
+                {secondary_cta}
+            </div>
+            <div class="trust-row">
+                <span>No app needed</span>
+                <span>Custom profile URL</span>
+                <span>QR + NFC ready</span>
+            </div>
+        </section>
+
+        <section class="product-stage" aria-label="BUTTN product preview">
+            <div class="dome-card"></div>
+            <div class="phone-card">
+                <div class="phone-screen">
+                    <div class="profile-top">
+                        <div class="avatar">{_buttn_logo_html("black", "buttn-avatar-logo")}</div>
+                        <div class="profile-name">Your Brand</div>
+                        <div class="profile-sub">mybuttn.com/yourbrand</div>
+                    </div>
+                    <div class="link-stack">
+                        <div class="fake-link">Shop New Drop</div>
+                        <div class="fake-link">Watch Video</div>
+                        <div class="fake-link">Book A Call</div>
+                    </div>
+                </div>
+            </div>
+            <div class="qr-card" aria-hidden="true">
+                <div class="qr-grid">
+                    {''.join('<i></i>' for _ in range(49))}
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <section class="sections">
+        <div class="section-inner">
+            <h2 class="section-title">One page for every scan.</h2>
+            <p class="section-copy">Your customer taps the BUTTN or scans the QR code. They land on your branded page. From there they can shop, follow, book, watch, call, email, or leave their contact info.</p>
+            <div class="card-grid">
+                <div class="info-card">
+                    <h3>For brands</h3>
+                    <p>Send people to your store, latest drop, social pages, videos, and offers from one clean profile.</p>
+                </div>
+                <div class="info-card">
+                    <h3>For creators</h3>
+                    <p>Put your content, links, bookings, and lead capture in one place without handing out paper cards.</p>
+                </div>
+                <div class="info-card">
+                    <h3>For vendors</h3>
+                    <p>Use it at pop-ups, trade shows, vending events, packaging, business cards, and product displays.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="final-cta">
+        <div class="section-inner">
+            <h2 class="section-title">Build your BUTTN profile first.</h2>
+            <p class="section-copy">Then connect the QR code, NFC button, card, sticker, and product experience around it.</p>
+            <div class="cta-row" style="justify-content:center;">
+                {primary_cta}
+                <a class="btn btn-secondary" href="/generate">Try QR Generator</a>
+            </div>
+        </div>
+    </section>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/")
+def landing_page():
+    return render_landing_page()
+
+
+
 @app.route("/db-status")
 def db_status():
     if engine is None:
