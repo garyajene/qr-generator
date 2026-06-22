@@ -2319,10 +2319,14 @@ h1 {{ margin:0 0 6px; }} .muted {{ color:#666; }} .message {{ background:#eefaf0
 .profile-actions a {{ background:#f2f4f7; border-radius:999px; padding:8px 11px; text-decoration:none; }}
 a {{ color:#111; font-weight:800; }} button, .button {{ display:inline-block; margin-top:12px; padding:12px 16px; border:none; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:800; cursor:pointer; }}
 .upgrade-btn {{ display:inline-block; margin-top:12px; margin-left:10px; padding:12px 16px; border-radius:12px; background:#111; color:#fff; text-decoration:none; font-weight:900; }}
-.danger-card {{ border-color:#f0caca; }}
+.account-danger-footer {{ text-align:center; margin:22px 0 4px; }}
+.delete-account-link {{ display:inline-block; border:none; background:transparent; color:#8a1f1f; font-weight:900; text-decoration:underline; cursor:pointer; padding:8px 10px; font-size:14px; font-family:Arial,sans-serif; }}
+.delete-account-link:hover {{ color:#5f1010; }}
+.delete-modal-card {{ border-top:6px solid #8a1f1f; }}
 .danger-title {{ color:#8a1f1f; margin:0 0 8px; }}
 .danger-text {{ color:#555; line-height:1.45; }}
 .delete-account-btn {{ background:#8a1f1f; color:#fff; width:100%; }}
+.cancel-delete-btn {{ background:#f1f1f1; color:#111; width:100%; margin-top:10px; }}
 input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5df; border-radius:10px; font-size:16px; }} label {{ display:block; font-weight:700; margin:12px 0 7px; }} .empty {{ color:#666; }}
 .url-message, .limit-message {{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; font-weight:800; }}
 .account-stats {{ margin-top:8px; color:#555; font-weight:800; }}
@@ -2350,20 +2354,31 @@ input {{ width:100%; box-sizing:border-box; padding:12px; border:1px solid #cfd5
     <div class="profile-card-head"><h2>My Profiles</h2>{create_form_html}</div>
     {profile_rows}
   </div>
-  <div class="card danger-card">
-    <h2 class="danger-title">Delete Account</h2>
-    <p class="danger-text">This permanently deletes this account, all profiles, links, analytics, and leads. Type your email to confirm.</p>
-    <form method="post" action="/account/delete" onsubmit="return confirm('Delete this BUTTN account permanently? This cannot be undone.');">
-        <label>Confirm Email</label>
-        <input type="email" name="confirm_email" placeholder="{safe_email}" required>
-        <button type="submit" class="delete-account-btn">Delete Account Permanently</button>
-    </form>
+  <div class="account-danger-footer">
+    <button type="button" id="open_delete_account_modal" class="delete-account-link">Delete Account</button>
+  </div>
+  <div id="delete_account_modal" class="modal-overlay">
+    <div class="modal-card delete-modal-card">
+        <button type="button" id="close_delete_account_modal" class="modal-close">×</button>
+        <h2 class="danger-title">Delete Account</h2>
+        <p class="danger-text">This permanently deletes this account, all profiles, links, analytics, and leads. Type your email to confirm.</p>
+        <form method="post" action="/account/delete" onsubmit="return confirm('Delete this BUTTN account permanently? This cannot be undone.');">
+            <label>Confirm Email</label>
+            <input type="email" name="confirm_email" placeholder="{safe_email}" required>
+            <button type="submit" class="delete-account-btn">Delete Account Permanently</button>
+            <button type="button" id="cancel_delete_account_modal" class="cancel-delete-btn">Cancel</button>
+        </form>
+    </div>
   </div>
 </div>
 <script>
 const openCreateProfileModal = document.getElementById("open_create_profile_modal");
 const closeCreateProfileModal = document.getElementById("close_create_profile_modal");
 const createProfileModal = document.getElementById("create_profile_modal");
+const openDeleteAccountModal = document.getElementById("open_delete_account_modal");
+const closeDeleteAccountModal = document.getElementById("close_delete_account_modal");
+const cancelDeleteAccountModal = document.getElementById("cancel_delete_account_modal");
+const deleteAccountModal = document.getElementById("delete_account_modal");
 if (openCreateProfileModal && createProfileModal) {{
     openCreateProfileModal.addEventListener("click", function() {{
         createProfileModal.classList.add("show");
@@ -2378,6 +2393,28 @@ if (createProfileModal) {{
     createProfileModal.addEventListener("click", function(e) {{
         if (e.target === createProfileModal) {{
             createProfileModal.classList.remove("show");
+        }}
+    }});
+}}
+if (openDeleteAccountModal && deleteAccountModal) {{
+    openDeleteAccountModal.addEventListener("click", function() {{
+        deleteAccountModal.classList.add("show");
+    }});
+}}
+if (closeDeleteAccountModal && deleteAccountModal) {{
+    closeDeleteAccountModal.addEventListener("click", function() {{
+        deleteAccountModal.classList.remove("show");
+    }});
+}}
+if (cancelDeleteAccountModal && deleteAccountModal) {{
+    cancelDeleteAccountModal.addEventListener("click", function() {{
+        deleteAccountModal.classList.remove("show");
+    }});
+}}
+if (deleteAccountModal) {{
+    deleteAccountModal.addEventListener("click", function(e) {{
+        if (e.target === deleteAccountModal) {{
+            deleteAccountModal.classList.remove("show");
         }}
     }});
 }}
