@@ -802,6 +802,8 @@ def render_page(
     safe_art_data_b64 = html.escape(art_data_b64 or "")
     safe_bg_override_value = html.escape(bg_override_value or "")
     safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
+    manual_override_value = "1" if bg_override_value else ""
+    safe_manual_override_value = html.escape(manual_override_value)
     safe_qr_style = (qr_style or "artistic").strip().lower()
 
     artistic_selected = "active" if safe_qr_style == "artistic" else ""
@@ -1314,7 +1316,7 @@ button {{
     <input type="hidden" name="art_data" id="art_data" value="{safe_art_data_b64}">
 
     <br>
-    <button type="submit">Generate</button>
+    <button type="submit" name="generate_action" value="generate">Generate</button>
 
     <div class="results">
         {f'''
@@ -1398,6 +1400,7 @@ button {{
                             <div class="hex-preview-row">
                                 <div class="value-box">
                                     <input type="text" id="bg_override" name="bg_override" value="{safe_bg_override_value or safe_current_bg_hex}">
+                                    <input type="hidden" id="bg_manual_override" name="bg_manual_override" value="{safe_manual_override_value}">
                                     <div class="lab">HEX</div>
                                 </div>
                                 <div id="large_picked_color" class="large-picked-color" title="Selected color preview"></div>
@@ -1427,7 +1430,7 @@ button {{
                         </div>
 
                         <div class="apply-row">
-                            <button type="submit" class="apply-btn">Apply Background Color</button>
+                            <button type="submit" class="apply-btn" name="generate_action" value="apply_bg" onclick="document.getElementById('bg_manual_override').value='1';">Apply Background Color</button>
                         </div>
                     </div>
                 </div>
@@ -1454,6 +1457,10 @@ function selectQRStyle(style) {{
         if (bgInput) {{
             bgInput.value = "";
         }}
+        const manualInput = document.getElementById("bg_manual_override");
+        if (manualInput) {{
+            manualInput.value = "";
+        }}
     }}
 
     if (simpleCard) {{
@@ -1470,11 +1477,23 @@ const fileInput = document.getElementById("artfile");
 const preview = document.getElementById("preview");
 const droptext = document.getElementById("droptext");
 const artDataInput = document.getElementById("art_data");
+const manualOverrideInput = document.getElementById("bg_manual_override");
 
 dropzone.onclick = () => fileInput.click();
 
+function clearGeneratedStateForNewArtwork() {{
+    document.querySelectorAll(".preview-and-mockups").forEach(el => el.remove());
+
+    if (!manualOverrideInput || manualOverrideInput.value !== "1") {{
+        const bgInput = document.getElementById("bg_override");
+        if (bgInput) bgInput.value = "";
+        document.querySelectorAll(".bg-tools").forEach(el => el.remove());
+    }}
+}}
+
 function loadFileIntoPreview(file) {{
     if (!file) return;
+    clearGeneratedStateForNewArtwork();
     preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
     droptext.style.display = "none";
@@ -3353,6 +3372,9 @@ def home():
     if request.method == "POST":
         data_value = (request.form.get("data") or "").strip()
         bg_override_value = (request.form.get("bg_override") or "").strip()
+        manual_bg_override = (request.form.get("bg_manual_override") or "").strip() == "1"
+        if not manual_bg_override:
+            bg_override_value = ""
         art_data_b64 = (request.form.get("art_data") or "").strip()
         qr_style = (request.form.get("qr_style") or "artistic").strip().lower()
         last_rendered_qr_style = (request.form.get("last_rendered_qr_style") or qr_style).strip().lower()
@@ -3363,6 +3385,7 @@ def home():
         # This allows Simple -> Branded -> Simple -> Branded to regenerate cleanly each time.
         if last_rendered_qr_style != qr_style:
             bg_override_value = ""
+            manual_bg_override = False
 
         art_file = request.files.get("artfile")
         art = fetch_uploaded_image(art_file)
