@@ -3608,8 +3608,15 @@ const preview = document.getElementById("preview");
 const droptext = document.getElementById("droptext");
 const artDataInput = document.getElementById("art_data");
 dropzone.onclick = () => fileInput.click();
+function resetBackgroundStateForNewArtwork() {{
+    const bgOverrideInput = document.getElementById("bg_override");
+    const manualOverrideInput = document.getElementById("bg_manual_override");
+    if (bgOverrideInput) bgOverrideInput.value = "";
+    if (manualOverrideInput) manualOverrideInput.value = "";
+}}
 function loadFileIntoPreview(file) {{
     if (!file) return;
+    resetBackgroundStateForNewArtwork();
     preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
     droptext.style.display = "none";
@@ -3649,10 +3656,20 @@ def generate_test_lab():
 
         art_data_b64 = (request.form.get("art_data") or "").strip()
         art_file = request.files.get("artfile")
-        original_art = fetch_uploaded_image(art_file)
+        uploaded_art = fetch_uploaded_image(art_file)
 
-        if original_art is None and art_data_b64:
+        # Developer test lab isolation: selecting a new artwork file starts a
+        # completely fresh background-selection project. Ignore any submitted
+        # manual override or hidden/current background state that may have been
+        # left on the page by the previous diagnostic generation.
+        if uploaded_art is not None:
+            bg_override_value = ""
+            manual_bg_override = False
+            original_art = uploaded_art
+        elif art_data_b64:
             original_art = fetch_image_from_hidden_b64(art_data_b64)
+        else:
+            original_art = None
 
         if data_value:
             generation_art = original_art.copy() if original_art is not None else None
