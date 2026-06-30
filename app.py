@@ -368,6 +368,54 @@ def is_near_black(rgb):
     return rgb[0] <= 35 and rgb[1] <= 35 and rgb[2] <= 35
 
 
+
+def relative_luminance(rgb):
+    """Return WCAG relative luminance for an RGB color."""
+    channels = []
+    for value in rgb:
+        normalized = value / 255.0
+        if normalized <= 0.04045:
+            channels.append(normalized / 12.92)
+        else:
+            channels.append(((normalized + 0.055) / 1.055) ** 2.4)
+    return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2])
+
+
+def contrast_ratio(luminance_a, luminance_b):
+    lighter = max(luminance_a, luminance_b)
+    darker = min(luminance_a, luminance_b)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def adaptive_qr_module_color(bg_color):
+    """Choose the QR module color for the selected background.
+
+    Light and medium backgrounds keep the existing pure black modules. For
+    sufficiently dark backgrounds, choose the darkest neutral gray that gives
+    phone cameras a small luminance separation from the background while still
+    reading visually as black.
+    """
+    bg_luminance = relative_luminance(bg_color)
+    dark_background_luminance = 0.10
+
+    if bg_luminance > dark_background_luminance:
+        return (0, 0, 0)
+
+    minimum_contrast = 1.6
+    minimum_luminance_delta = 0.035
+    darkest_blackish_gray = 112
+
+    for gray in range(1, darkest_blackish_gray + 1):
+        gray_luminance = relative_luminance((gray, gray, gray))
+        if (
+            gray_luminance > bg_luminance
+            and contrast_ratio(gray_luminance, bg_luminance) >= minimum_contrast
+            and (gray_luminance - bg_luminance) >= minimum_luminance_delta
+        ):
+            return (gray, gray, gray)
+
+    return (darkest_blackish_gray, darkest_blackish_gray, darkest_blackish_gray)
+
 def sample_region_average(img, x, y, radius=6):
     x0 = max(0, x - radius)
     y0 = max(0, y - radius)
@@ -578,7 +626,7 @@ def generate_branded_qr(data, art=None, bg_override=None):
     n = len(matrix)
 
     bg_color = choose_background_color(art, bg_override=bg_override)
-    dark_color = (0, 0, 0)
+    dark_color = adaptive_qr_module_color(bg_color)
     light_color = (255, 255, 255)
 
     size = (n + 2 * QUIET) * BOX
