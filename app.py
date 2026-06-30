@@ -674,6 +674,111 @@ def generate_branded_qr(data, art=None, bg_override=None):
     return canvas.convert("RGBA")
 
 
+QR_DIAGNOSTIC_VARIANTS = [
+    {
+        "key": "A",
+        "name": "Current production renderer",
+        "description": "No changes. This calls the same renderer used by /generate.",
+    },
+    {
+        "key": "B",
+        "name": "Module dot scale -0.04",
+        "description": "Only the dark and light circular module scale is reduced by 0.04.",
+        "dot_scale_delta": -0.04,
+    },
+    {
+        "key": "C",
+        "name": "White module scale matches dark module scale",
+        "description": "Only the white-module scale factor changes from 0.88 to 1.00.",
+        "white_scale_factor": 1.0,
+    },
+    {
+        "key": "D",
+        "name": "Protected modules use dot shape",
+        "description": "Only finder/alignment/protected modules switch from rectangles to dots.",
+        "protected_shape": "dot",
+    },
+    {
+        "key": "E",
+        "name": "Nearest-neighbor artwork sampling",
+        "description": "Only the artwork resize filter changes from LANCZOS to NEAREST.",
+        "art_resample": Image.NEAREST,
+    },
+]
+
+
+def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, variant=None):
+    """
+    Developer-only diagnostic clone of generate_branded_qr.
+
+    Version A intentionally delegates to production. Other versions keep the
+    same data, normalized artwork, selected background, sizing, QR matrix, and
+    export dimensions while changing exactly one rendering variable.
+    """
+    variant = variant or {}
+    if variant.get("key") == "A":
+        return generate_branded_qr(data, art, bg_override=bg_override)
+
+    qr = segno.make(data, error=ERROR_LEVEL)
+    matrix = matrix_from_segno(qr)
+    version = int(qr.version)
+    n = len(matrix)
+
+    bg_color = choose_background_color(art, bg_override=bg_override)
+    dark_color = adaptive_qr_module_color(bg_color)
+    light_color = (255, 255, 255)
+
+    size = (n + 2 * QUIET) * BOX
+    canvas = Image.new("RGBA", (size, size), (*bg_color, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    dot_scale = 0.48
+
+    if art:
+        complexity = analyze_complexity(art)
+        dot_scale = get_adaptive_dot_scale(complexity)
+        art_resample = variant.get("art_resample", Image.LANCZOS)
+        art_resized = art.resize((n * BOX, n * BOX), art_resample)
+        canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
+
+    dot_scale = max(0.20, min(0.95, dot_scale + variant.get("dot_scale_delta", 0.0)))
+    white_scale_factor = variant.get("white_scale_factor", 0.88)
+    protected_shape = variant.get("protected_shape", "rectangle")
+
+    def draw_dot(x0, y0, x1, y1, scale, color):
+        pad = (1.0 - scale) * BOX / 2.0
+        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
+
+    for r in range(n):
+        for c in range(n):
+            x0 = (QUIET + c) * BOX
+            y0 = (QUIET + r) * BOX
+            x1 = x0 + BOX
+            y1 = y0 + BOX
+            fill = (*dark_color, 255) if matrix[r][c] else (*light_color, 255)
+
+            if is_protected(r, c, n, version):
+                if protected_shape == "dot":
+                    draw_dot(x0, y0, x1, y1, dot_scale, fill)
+                else:
+                    draw.rectangle([x0, y0, x1, y1], fill=fill)
+                continue
+
+            if matrix[r][c]:
+                draw_dot(x0, y0, x1, y1, dot_scale, fill)
+            else:
+                white_scale = max(0.35, min(0.85, dot_scale * white_scale_factor))
+                draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
+
+    qpx = QUIET * BOX
+    draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
+    draw.rectangle([0, size - qpx, size, size], fill=(*bg_color, 255))
+    draw.rectangle([0, 0, qpx, size], fill=(*bg_color, 255))
+    draw.rectangle([size - qpx, 0, size, size], fill=(*bg_color, 255))
+
+    return canvas.convert("RGBA")
+
+
 def draw_simple_finder(draw, x, y, module_box, stroke_color, fill_color):
     outer_left = x + module_box
     outer_top = y + module_box
@@ -3409,6 +3514,188 @@ def account_create_profile():
     profile["spotlight_media_shape"] = "vertical"
     _save_db_profile(username, profile, user_id)
     return redirect(f"/buttn/edit/{username}")
+
+def render_generate_test_page(
+    diagnostic_results=None,
+    data_value="",
+    art_data_b64="",
+    bg_override_value="",
+    current_bg_hex="#ffffff",
+):
+    diagnostic_results = diagnostic_results or []
+    safe_data_value = html.escape(data_value or "")
+    safe_art_data_b64 = html.escape(art_data_b64 or "")
+    safe_bg_override_value = html.escape(bg_override_value or "")
+    safe_current_bg_hex = html.escape(current_bg_hex or "#ffffff")
+    safe_manual_override_value = "1" if bg_override_value else ""
+
+    result_cards = ""
+    for result in diagnostic_results:
+        key = html.escape(result["key"])
+        name = html.escape(result["name"])
+        description = html.escape(result["description"])
+        b64 = result["b64"]
+        result_cards += f'''
+        <section class="diagnostic-card">
+            <h2>Version {key}: {name}</h2>
+            <p>{description}</p>
+            <img class="diagnostic-qr" src="data:image/png;base64,{b64}" alt="Diagnostic QR version {key}">
+        </section>
+        '''
+
+    results_html = f'<div class="results-grid">{result_cards}</div>' if result_cards else ''
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>QR Diagnostic Test Lab</title>
+<style>
+body {{ font-family: Arial, sans-serif; padding: 30px; background: #ffffff; }}
+{_app_nav_css()}
+h1 {{ margin-bottom: 8px; }}
+.dev-warning {{ max-width: 860px; padding: 14px 16px; border: 1px solid #f0c36d; background: #fff8e5; border-radius: 10px; margin: 16px 0 26px; }}
+.label {{ font-weight: bold; margin-bottom: 8px; }}
+input[type="text"] {{ width: 360px; padding: 10px; font-size: 16px; }}
+#dropzone {{ width: 420px; height: 220px; border: 2px dashed #999; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-top: 10px; background: #fff; text-align: center; }}
+#dropzone.hover {{ border-color: #000; }}
+#preview {{ max-width: 260px; max-height: 180px; display: none; }}
+button {{ margin-top: 16px; padding: 10px 18px; font-size: 16px; cursor: pointer; }}
+.bg-row {{ margin-top: 18px; }}
+.bg-row input {{ width: 180px; }}
+.small-note {{ font-size: 14px; color: #555; margin-top: 8px; max-width: 760px; line-height: 1.4; }}
+.results-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 34px; }}
+.diagnostic-card {{ border: 1px solid #ddd; border-radius: 14px; padding: 18px; background: #fafafa; }}
+.diagnostic-card h2 {{ font-size: 18px; margin: 0 0 8px; }}
+.diagnostic-card p {{ color: #555; min-height: 42px; }}
+.diagnostic-qr {{ width: 100%; max-width: 360px; height: auto; display: block; background: #fff; }}
+</style>
+</head>
+<body>
+{_app_nav_html()}
+<h1>QR Diagnostic Test Lab</h1>
+<div class="dev-warning"><strong>Developer-only page.</strong> This route is isolated from <code>/generate</code>; it does not save data, change production routes, or replace the customer QR workflow.</div>
+
+<form action="/generate-test" method="post" enctype="multipart/form-data">
+    <div class="label">QR Data</div>
+    <input type="text" name="data" required placeholder="Enter QR Data" value="{safe_data_value}"><br><br>
+
+    <div class="label">Upload Artwork (optional)</div>
+    <div id="dropzone">
+        <span id="droptext">Drop Image Here or Click</span>
+        <img id="preview" />
+    </div>
+    <input type="file" id="artfile" name="artfile" accept="image/*" style="display:none">
+    <input type="hidden" name="art_data" id="art_data" value="{safe_art_data_b64}">
+
+    <div class="bg-row">
+        <div class="label">Background Override (optional)</div>
+        <input type="text" id="bg_override" name="bg_override" placeholder="#ffffff" value="{safe_bg_override_value}">
+        <input type="hidden" id="bg_manual_override" name="bg_manual_override" value="{safe_manual_override_value}">
+        <div class="small-note">All diagnostic versions use the same URL, normalized artwork, background selection, sizing, and export dimensions. Each version changes exactly one rendering variable.</div>
+    </div>
+
+    <button type="submit" name="generate_action" value="generate" onclick="document.getElementById('bg_manual_override').value = document.getElementById('bg_override').value ? '1' : '';">Generate Test Versions</button>
+</form>
+
+{results_html}
+
+<script>
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("artfile");
+const preview = document.getElementById("preview");
+const droptext = document.getElementById("droptext");
+const artDataInput = document.getElementById("art_data");
+dropzone.onclick = () => fileInput.click();
+function loadFileIntoPreview(file) {{
+    if (!file) return;
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+    droptext.style.display = "none";
+    const reader = new FileReader();
+    reader.onload = function(e) {{
+        const result = e.target.result || "";
+        const parts = result.split(",");
+        if (parts.length === 2) artDataInput.value = parts[1];
+    }};
+    reader.readAsDataURL(file);
+}}
+fileInput.onchange = () => loadFileIntoPreview(fileInput.files[0]);
+dropzone.addEventListener("dragover", e => {{ e.preventDefault(); dropzone.classList.add("hover"); }});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("hover"));
+dropzone.addEventListener("drop", e => {{ e.preventDefault(); dropzone.classList.remove("hover"); if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{ fileInput.files = e.dataTransfer.files; loadFileIntoPreview(e.dataTransfer.files[0]); }} }});
+if (artDataInput.value) {{ droptext.textContent = "Previously uploaded artwork is ready. Drop or click to replace."; }}
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/generate-test", methods=["GET", "POST"])
+def generate_test_lab():
+    diagnostic_results = []
+    data_value = ""
+    art_data_b64 = ""
+    bg_override_value = ""
+    current_bg_hex = "#ffffff"
+
+    if request.method == "POST":
+        data_value = (request.form.get("data") or "").strip()
+        bg_override_value = (request.form.get("bg_override") or "").strip()
+        manual_bg_override = (request.form.get("bg_manual_override") or "").strip() == "1"
+        if not manual_bg_override:
+            bg_override_value = ""
+
+        art_data_b64 = (request.form.get("art_data") or "").strip()
+        art_file = request.files.get("artfile")
+        original_art = fetch_uploaded_image(art_file)
+
+        if original_art is None and art_data_b64:
+            original_art = fetch_image_from_hidden_b64(art_data_b64)
+
+        if data_value:
+            generation_art = original_art.copy() if original_art is not None else None
+            qr_art = normalize_artwork_to_square(
+                generation_art,
+                tolerance=0.12,
+                bg_override=bg_override_value,
+            )
+
+            for variant in QR_DIAGNOSTIC_VARIANTS:
+                variant_art = qr_art.copy() if qr_art is not None else None
+                qr_img = generate_branded_qr_diagnostic_variant(
+                    data_value,
+                    variant_art,
+                    bg_override=bg_override_value,
+                    variant=variant,
+                )
+                diagnostic_results.append({
+                    "key": variant["key"],
+                    "name": variant["name"],
+                    "description": variant["description"],
+                    "b64": image_to_base64(qr_img),
+                })
+
+            if diagnostic_results:
+                first_img = generate_branded_qr_diagnostic_variant(
+                    data_value,
+                    qr_art.copy() if qr_art is not None else None,
+                    bg_override=bg_override_value,
+                    variant=QR_DIAGNOSTIC_VARIANTS[0],
+                )
+                current_bg_hex = rgb_to_hex(first_img.convert("RGB").getpixel((5, 5)))
+
+            if original_art is not None:
+                art_data_b64 = image_to_base64(original_art)
+
+    return render_generate_test_page(
+        diagnostic_results=diagnostic_results,
+        data_value=data_value,
+        art_data_b64=art_data_b64,
+        bg_override_value=bg_override_value,
+        current_bg_hex=current_bg_hex,
+    )
 
 @app.route("/generate", methods=["GET", "POST"])
 def home():
