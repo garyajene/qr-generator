@@ -662,6 +662,10 @@ def generate_simple_qr(data, logo=None):
     Simple QR must stay scanner-safe.
     This uses Segno's standard renderer for the QR itself, then places a small
     logo badge in the center. It does not manually redraw the QR matrix.
+
+    Work on a per-generation copy of the supplied logo so Pillow operations such
+    as thumbnail() never mutate artwork that may be reused by the request while
+    rendering previews or preserving the upload field.
     """
     qr = segno.make(data, error=ERROR_LEVEL)
 
@@ -680,7 +684,7 @@ def generate_simple_qr(data, logo=None):
     draw = ImageDraw.Draw(img)
 
     if logo:
-        logo = logo.convert("RGBA")
+        logo = logo.copy().convert("RGBA")
 
         # Keep the logo conservative so error correction can still recover.
         max_logo_side = int(img.width * 0.14)
@@ -3388,20 +3392,30 @@ def home():
             manual_bg_override = False
 
         art_file = request.files.get("artfile")
-        art = fetch_uploaded_image(art_file)
+        original_art = fetch_uploaded_image(art_file)
 
-        if art is None and art_data_b64:
-            art = fetch_image_from_hidden_b64(art_data_b64)
+        if original_art is None and art_data_b64:
+            original_art = fetch_image_from_hidden_b64(art_data_b64)
 
         if qr_style not in ("simple", "artistic"):
             qr_style = "artistic"
 
         if data_value:
+            # Start every generation from a clean, request-local artwork object.
+            # Rendering helpers may resize, pad, or thumbnail images; none of those
+            # derived objects should be written back as the upload source for a
+            # later Generate click.
+            generation_art = original_art.copy() if original_art is not None else None
+
             if qr_style == "simple":
-                qr_img = generate_simple_qr(data_value, logo=art)
+                qr_img = generate_simple_qr(data_value, logo=generation_art)
             else:
-                art = normalize_artwork_to_square(art, tolerance=0.12, bg_override=bg_override_value)
-                qr_img = generate_branded_qr(data_value, art, bg_override=bg_override_value)
+                qr_art = normalize_artwork_to_square(
+                    generation_art,
+                    tolerance=0.12,
+                    bg_override=bg_override_value,
+                )
+                qr_img = generate_branded_qr(data_value, qr_art, bg_override=bg_override_value)
 
             qr_b64 = image_to_base64(qr_img)
 
@@ -3413,8 +3427,8 @@ def home():
 
             current_bg_hex = rgb_to_hex(qr_img.convert("RGB").getpixel((5, 5)))
 
-            if art is not None:
-                art_data_b64 = image_to_base64(art)
+            if original_art is not None:
+                art_data_b64 = image_to_base64(original_art)
 
     return render_page(
         qr_img_b64=qr_b64,
