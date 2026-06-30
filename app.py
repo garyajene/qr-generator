@@ -571,6 +571,107 @@ def get_adaptive_dot_scale(complexity):
         return 0.54
 
 
+def relative_luminance(rgb):
+    def channel(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb[:3]
+    return (0.2126 * channel(r)) + (0.7152 * channel(g)) + (0.0722 * channel(b))
+
+
+def average_region_luminance(img, box):
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    x0 = max(0, min(img.width, x0))
+    y0 = max(0, min(img.height, y0))
+    x1 = max(x0 + 1, min(img.width, x1))
+    y1 = max(y0 + 1, min(img.height, y1))
+    stat = ImageStat.Stat(img.crop((x0, y0, x1, y1)).convert("RGB"))
+    return relative_luminance(stat.mean)
+
+
+def apply_local_qr_safeguard(canvas, box, module_is_dark, strength=90, inset=0):
+    x0, y0, x1, y1 = box
+    if inset:
+        x0 += inset
+        y0 += inset
+        x1 -= inset
+        y1 -= inset
+    if x1 <= x0 or y1 <= y0:
+        return
+
+    overlay_draw = ImageDraw.Draw(canvas, "RGBA")
+    guard_color = (255, 255, 255, strength) if module_is_dark else (0, 0, 0, strength)
+    overlay_draw.ellipse([x0, y0, x1, y1], fill=guard_color)
+
+
+def draw_qr_dot(draw, x0, y0, x1, y1, scale, color):
+    pad = (1.0 - scale) * BOX / 2.0
+    draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
+
+
+def validate_artistic_qr_contrast(canvas, matrix, version, dot_scale):
+    """Apply tiny local corrections where artwork reduces module contrast.
+
+    This pass intentionally works on the rendered pixels only. It does not touch
+    encoded QR data, sizing, quiet zone, finder patterns, timing patterns, or
+    alignment/format modules.
+    """
+    n = len(matrix)
+    rgb_canvas = canvas.convert("RGB")
+    min_delta = 0.34
+    dot_pad = (1.0 - dot_scale) * BOX / 2.0
+    sample_inset = max(2, int(BOX * 0.28))
+
+    for r in range(n):
+        for c in range(n):
+            if is_protected(r, c, n, version):
+                continue
+
+            x0 = (QUIET + c) * BOX
+            y0 = (QUIET + r) * BOX
+            x1 = x0 + BOX
+            y1 = y0 + BOX
+            module_dark = matrix[r][c]
+
+            module_lum = average_region_luminance(
+                rgb_canvas,
+                (x0 + sample_inset, y0 + sample_inset, x1 - sample_inset, y1 - sample_inset),
+            )
+
+            surroundings = []
+            if r > 0 and not is_protected(r - 1, c, n, version):
+                surroundings.append((x0, y0 - BOX, x1, y0))
+            if r < n - 1 and not is_protected(r + 1, c, n, version):
+                surroundings.append((x0, y1, x1, y1 + BOX))
+            if c > 0 and not is_protected(r, c - 1, n, version):
+                surroundings.append((x0 - BOX, y0, x0, y1))
+            if c < n - 1 and not is_protected(r, c + 1, n, version):
+                surroundings.append((x1, y0, x1 + BOX, y1))
+            if not surroundings:
+                continue
+
+            surround_lum = sum(average_region_luminance(rgb_canvas, b) for b in surroundings) / len(surroundings)
+            delta = (surround_lum - module_lum) if module_dark else (module_lum - surround_lum)
+            if delta >= min_delta:
+                continue
+
+            missing = min_delta - delta
+            strength = max(34, min(118, int(34 + missing * 210)))
+            guard_pad = max(1, int(dot_pad * 0.42))
+            apply_local_qr_safeguard(
+                canvas,
+                (x0 + guard_pad, y0 + guard_pad, x1 - guard_pad, y1 - guard_pad),
+                module_dark,
+                strength=strength,
+            )
+            redraw = ImageDraw.Draw(canvas)
+            if module_dark:
+                draw_qr_dot(redraw, x0, y0, x1, y1, dot_scale, (0, 0, 0, 255))
+            else:
+                white_scale = max(0.35, min(0.85, dot_scale * 0.88))
+                draw_qr_dot(redraw, x0, y0, x1, y1, white_scale, (255, 255, 255, 255))
+
 def generate_branded_qr(data, art=None, bg_override=None):
     qr = segno.make(data, error=ERROR_LEVEL)
     matrix = matrix_from_segno(qr)
@@ -593,9 +694,18 @@ def generate_branded_qr(data, art=None, bg_override=None):
         art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
         canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
 
-    def draw_dot(x0, y0, x1, y1, scale, color):
-        pad = (1.0 - scale) * BOX / 2.0
-        draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
+    def draw_module_safety_zone(x0, y0, x1, y1, module_is_dark):
+        # A tiny under-dot halo keeps complex artwork from visually touching or
+        # filling the separation between adjacent QR modules. It is rendered
+        # inside the existing module box, so QR sizing and encoded data are unchanged.
+        safety_scale = min(0.78, dot_scale + 0.18)
+        safety_pad = (1.0 - safety_scale) * BOX / 2.0
+        apply_local_qr_safeguard(
+            canvas,
+            (x0 + safety_pad, y0 + safety_pad, x1 - safety_pad, y1 - safety_pad),
+            module_is_dark,
+            strength=48,
+        )
 
     for r in range(n):
         for c in range(n):
@@ -612,10 +722,14 @@ def generate_branded_qr(data, art=None, bg_override=None):
                 continue
 
             if matrix[r][c]:
-                draw_dot(x0, y0, x1, y1, dot_scale, (*dark_color, 255))
+                draw_module_safety_zone(x0, y0, x1, y1, True)
+                draw_qr_dot(draw, x0, y0, x1, y1, dot_scale, (*dark_color, 255))
             else:
                 white_scale = max(0.35, min(0.85, dot_scale * 0.88))
-                draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
+                draw_module_safety_zone(x0, y0, x1, y1, False)
+                draw_qr_dot(draw, x0, y0, x1, y1, white_scale, (*light_color, 255))
+
+    validate_artistic_qr_contrast(canvas, matrix, version, dot_scale)
 
     qpx = QUIET * BOX
     draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
