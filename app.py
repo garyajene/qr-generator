@@ -387,6 +387,14 @@ def contrast_ratio(luminance_a, luminance_b):
     return (lighter + 0.05) / (darker + 0.05)
 
 
+DARK_QR_BACKGROUND_LUMINANCE = 0.10
+
+
+def should_use_light_on_dark_qr(bg_color):
+    """Return True when a branded QR needs the high-contrast dark renderer."""
+    return relative_luminance(bg_color) <= DARK_QR_BACKGROUND_LUMINANCE
+
+
 def adaptive_qr_module_color(bg_color):
     """Choose the QR module color for the selected background.
 
@@ -396,9 +404,8 @@ def adaptive_qr_module_color(bg_color):
     reading visually as black.
     """
     bg_luminance = relative_luminance(bg_color)
-    dark_background_luminance = 0.10
 
-    if bg_luminance > dark_background_luminance:
+    if not should_use_light_on_dark_qr(bg_color):
         return (0, 0, 0)
 
     minimum_contrast = 1.6
@@ -626,6 +633,7 @@ def generate_branded_qr(data, art=None, bg_override=None):
     n = len(matrix)
 
     bg_color = choose_background_color(art, bg_override=bg_override)
+    light_on_dark = should_use_light_on_dark_qr(bg_color)
     dark_color = adaptive_qr_module_color(bg_color)
     light_color = (255, 255, 255)
 
@@ -641,6 +649,12 @@ def generate_branded_qr(data, art=None, bg_override=None):
         art_resized = art.resize((n * BOX, n * BOX), Image.LANCZOS)
         canvas.paste(art_resized, (QUIET * BOX, QUIET * BOX), art_resized)
 
+    # Version C from the diagnostic lab: larger dots are more resistant to
+    # camera blur and resizing. Apply it only to backgrounds classified as
+    # dark; light and medium branded QR output stays byte-for-byte unchanged.
+    if light_on_dark:
+        dot_scale = max(0.20, min(0.95, dot_scale + 0.14))
+
     def draw_dot(x0, y0, x1, y1, scale, color):
         pad = (1.0 - scale) * BOX / 2.0
         draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
@@ -651,6 +665,19 @@ def generate_branded_qr(data, art=None, bg_override=None):
             y0 = (QUIET + r) * BOX
             x1 = x0 + BOX
             y1 = y0 + BOX
+
+            if light_on_dark:
+                # Deliberately invert the QR polarity: Segno signal modules
+                # become white, while opposite modules use the selected dark
+                # ground. Protected structures are solid so finder,
+                # separator, timing, format, and alignment geometry remains
+                # exact. Ordinary modules stay dotted to preserve branding.
+                inverted_fill = (*light_color, 255) if matrix[r][c] else (*bg_color, 255)
+                if is_protected(r, c, n, version):
+                    draw.rectangle([x0, y0, x1, y1], fill=inverted_fill)
+                else:
+                    draw_dot(x0, y0, x1, y1, dot_scale, inverted_fill)
+                continue
 
             if is_protected(r, c, n, version):
                 draw.rectangle(
