@@ -682,28 +682,44 @@ QR_DIAGNOSTIC_VARIANTS = [
     },
     {
         "key": "B",
-        "name": "Module dot scale -0.04",
-        "description": "Only the dark and light circular module scale is reduced by 0.04.",
-        "dot_scale_delta": -0.04,
+        "name": "True light-on-dark dots",
+        "description": "Dark-background test: QR signal modules are white and opposite modules are the selected dark ground color. Protected structures stay solid and high contrast.",
+        "render_mode": "light_on_dark",
     },
     {
         "key": "C",
-        "name": "White module scale matches dark module scale",
-        "description": "Only the white-module scale factor changes from 0.88 to 1.00.",
-        "white_scale_factor": 1.0,
+        "name": "True light-on-dark, stronger dots",
+        "description": "Same true light-on-dark renderer as B, with larger data dots to survive camera blur and resizing.",
+        "render_mode": "light_on_dark",
+        "dot_scale_delta": 0.14,
     },
     {
         "key": "D",
-        "name": "Protected modules use dot shape",
-        "description": "Only finder/alignment/protected modules switch from rectangles to dots.",
-        "protected_shape": "dot",
+        "name": "True light-on-dark square baseline",
+        "description": "Same polarity and protected structures as B, but ordinary data modules use large squares as a conservative scanability baseline.",
+        "render_mode": "light_on_dark",
+        "data_shape": "square",
+        "dot_scale_delta": 0.30,
     },
     {
         "key": "E",
-        "name": "Nearest-neighbor artwork sampling",
-        "description": "Only the artwork resize filter changes from LANCZOS to NEAREST.",
-        "art_resample": Image.NEAREST,
+        "name": "True light-on-dark, mask 0",
+        "description": "Same renderer as B with QR mask pattern 0 forced for artwork-interference testing.",
+        "render_mode": "light_on_dark",
+        "dot_scale_delta": 0.14,
+        "mask": 0,
     },
+    *[
+        {
+            "key": chr(ord("F") + mask - 1),
+            "name": f"True light-on-dark, mask {mask}",
+            "description": f"Same renderer as B with QR mask pattern {mask} forced for artwork-interference testing.",
+            "render_mode": "light_on_dark",
+            "dot_scale_delta": 0.14,
+            "mask": mask,
+        }
+        for mask in range(1, 8)
+    ],
 ]
 
 
@@ -719,7 +735,11 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
     if variant.get("key") == "A":
         return generate_branded_qr(data, art, bg_override=bg_override)
 
-    qr = segno.make(data, error=ERROR_LEVEL)
+    mask = variant.get("mask")
+    if mask is None:
+        qr = segno.make(data, error=ERROR_LEVEL)
+    else:
+        qr = segno.make(data, error=ERROR_LEVEL, mask=mask)
     matrix = matrix_from_segno(qr)
     version = int(qr.version)
     n = len(matrix)
@@ -744,10 +764,16 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
     dot_scale = max(0.20, min(0.95, dot_scale + variant.get("dot_scale_delta", 0.0)))
     white_scale_factor = variant.get("white_scale_factor", 0.88)
     protected_shape = variant.get("protected_shape", "rectangle")
+    render_mode = variant.get("render_mode", "production")
+    data_shape = variant.get("data_shape", "dot")
 
     def draw_dot(x0, y0, x1, y1, scale, color):
         pad = (1.0 - scale) * BOX / 2.0
         draw.ellipse([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
+
+    def draw_square(x0, y0, x1, y1, scale, color):
+        pad = (1.0 - scale) * BOX / 2.0
+        draw.rectangle([x0 + pad, y0 + pad, x1 - pad, y1 - pad], fill=color)
 
     for r in range(n):
         for c in range(n):
@@ -755,6 +781,24 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
             y0 = (QUIET + r) * BOX
             x1 = x0 + BOX
             y1 = y0 + BOX
+
+            if render_mode == "light_on_dark":
+                # A real inverted QR maps Segno's signal modules to white and
+                # its opposite modules to the selected dark ground. The old
+                # renderer did the reverse: gray signal modules disappeared
+                # into black while white non-signal dots became visually
+                # dominant. Paint every protected cell solid so finder,
+                # separator, timing, format, and alignment patterns retain
+                # their exact geometry and maximum contrast.
+                inverted_fill = (*light_color, 255) if matrix[r][c] else (*bg_color, 255)
+                if is_protected(r, c, n, version):
+                    draw.rectangle([x0, y0, x1, y1], fill=inverted_fill)
+                elif data_shape == "square":
+                    draw_square(x0, y0, x1, y1, dot_scale, inverted_fill)
+                else:
+                    draw_dot(x0, y0, x1, y1, dot_scale, inverted_fill)
+                continue
+
             fill = (*dark_color, 255) if matrix[r][c] else (*light_color, 255)
 
             if is_protected(r, c, n, version):
