@@ -732,18 +732,26 @@ def draw_superellipse(draw, bounds, fill):
     draw.bitmap((left, top), mask, fill=fill)
 
 
-def draw_finder_patterns(draw, matrix_size, outer_color, middle_color, pupil_colors=None):
+def draw_finder_patterns(
+    draw,
+    matrix_size,
+    outer_color,
+    middle_color,
+    pupil_colors=None,
+    footprint_color=None,
+):
     """Replace only the three 7x7 finder footprints with 7/5/3 squircles."""
     starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
     for finder_index, (column, row) in enumerate(starts):
         left = (QUIET + column) * BOX
         top = (QUIET + row) * BOX
 
-        # Clear only the original 7x7 footprint. This prevents artwork or the
-        # square Segno finder underneath from showing through rounded corners.
+        # Clear only the original 7x7 footprint. Use the surrounding QR ground
+        # when supplied so the rounded outer anchor does not retain a square
+        # outline from the original Segno finder underneath.
         draw.rectangle(
             [left, top, left + 7 * BOX - 1, top + 7 * BOX - 1],
-            fill=middle_color,
+            fill=footprint_color if footprint_color is not None else middle_color,
         )
         draw_superellipse(
             draw,
@@ -859,14 +867,24 @@ def generate_branded_qr(data, art=None, bg_override=None):
         # polarity: a black outer anchor and a white inner ring. Finder styling
         # does not need to inherit the polarity used by the ordinary modules.
         draw_finder_patterns(
-            draw, n, (0, 0, 0, 255), (*light_color, 255), pupil_colors
+            draw,
+            n,
+            (0, 0, 0, 255),
+            (*light_color, 255),
+            pupil_colors,
+            (*bg_color, 255),
         )
     else:
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=dark_color, surrounding_color=light_color
         ) if art else None
         draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
+            draw,
+            n,
+            (*dark_color, 255),
+            (*light_color, 255),
+            pupil_colors,
+            (*bg_color, 255),
         )
 
     qpx = QUIET * BOX
@@ -1025,14 +1043,24 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
         # Match production: light-on-dark data modules do not invert the
         # conventional black-and-white finder anchors.
         draw_finder_patterns(
-            draw, n, (0, 0, 0, 255), (*light_color, 255), pupil_colors
+            draw,
+            n,
+            (0, 0, 0, 255),
+            (*light_color, 255),
+            pupil_colors,
+            (*bg_color, 255),
         )
     else:
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=dark_color, surrounding_color=light_color
         ) if art else None
         draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
+            draw,
+            n,
+            (*dark_color, 255),
+            (*light_color, 255),
+            pupil_colors,
+            (*bg_color, 255),
         )
 
     qpx = QUIET * BOX
