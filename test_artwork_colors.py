@@ -83,11 +83,21 @@ class ArtworkColorTests(unittest.TestCase):
                 self.assertEqual([ORANGE] * 3, pupil_colors)
                 self.assertEqual([(0, 0, 0)] * 3, outer_colors)
 
-    def test_nearly_black_ground_uses_white_finder_frame(self):
+    def test_nearly_black_ground_keeps_black_top_ring(self):
         self.assertEqual(
-            ((255, 255, 255), (12, 12, 12)),
+            ((0, 0, 0), (255, 255, 255)),
             choose_finder_pattern_colors((12, 12, 12)),
         )
+
+    def test_light_cream_is_not_preferred_over_a_real_accent(self):
+        art = Image.new("RGBA", (300, 300), (77, 39, 132, 255))
+        draw = ImageDraw.Draw(art)
+        draw.rectangle((50, 80, 145, 220), fill=(244, 225, 205, 255))
+        draw.rectangle((155, 80, 250, 220), fill=(*ORANGE, 255))
+
+        colors = choose_finder_pupil_colors(art, PURPLE)
+
+        self.assertEqual([(*ORANGE, 255)] * 3, colors)
 
     def test_monochrome_artwork_uses_safe_fallback(self):
         art = Image.new("RGBA", (300, 300), (255, 255, 255, 255))

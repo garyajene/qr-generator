@@ -601,7 +601,13 @@ def choose_finder_pupil_colors(
         if contrast_ratio(relative_luminance(color), surrounding_luminance)
         >= FINDER_PUPIL_MIN_CONTRAST
     ]
-    chromatic = [color for color in contrasting if max(color) - min(color) >= 30]
+    chromatic = [
+        color for color in contrasting
+        if (
+            max(color) - min(color) >= 40
+            and (max(color) - min(color)) / max(1, max(color)) >= 0.25
+        )
+    ]
     if chromatic:
         contrasting = chromatic
     if not contrasting:
@@ -610,9 +616,7 @@ def choose_finder_pupil_colors(
 
 
 def choose_finder_pattern_colors(background_color):
-    """Return a black-framed finder palette, except on nearly black ground."""
-    if is_near_black(background_color):
-        return (255, 255, 255), background_color
+    """Return the branded black outer ring and white inner ring."""
     return (0, 0, 0), (255, 255, 255)
 
 
