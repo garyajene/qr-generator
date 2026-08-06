@@ -2,6 +2,7 @@ from flask import Flask, request, redirect, session, Response
 from io import BytesIO, StringIO
 import csv
 import base64
+import math
 import random
 import re
 from collections import Counter
@@ -603,6 +604,74 @@ def matrix_from_segno(qr):
     return [[bool(v) for v in row] for row in qr.matrix]
 
 
+FINDER_SUPERELLIPSE_EXPONENT = 5.0
+FINDER_SUPERSAMPLE = 4
+
+
+def draw_superellipse(draw, bounds, fill):
+    """Draw a clipped, antialiased superellipse without crossing its bounds."""
+    left, top, right, bottom = [int(value) for value in bounds]
+    width = right - left
+    height = bottom - top
+    scale = FINDER_SUPERSAMPLE
+    mask = Image.new("L", (width * scale, height * scale), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    center_x = width * scale / 2.0
+    center_y = height * scale / 2.0
+    radius_x = width * scale / 2.0
+    radius_y = height * scale / 2.0
+    points = []
+
+    # |x/a|^n + |y/b|^n = 1. The same exponent is used for every
+    # finder layer so the outer ring, white ring, and pupil stay concentric.
+    for degree in range(360):
+        angle = math.radians(degree)
+        cos_value = math.cos(angle)
+        sin_value = math.sin(angle)
+        denominator = (
+            abs(cos_value) ** FINDER_SUPERELLIPSE_EXPONENT
+            + abs(sin_value) ** FINDER_SUPERELLIPSE_EXPONENT
+        ) ** (1.0 / FINDER_SUPERELLIPSE_EXPONENT)
+        points.append((
+            center_x + radius_x * cos_value / denominator,
+            center_y + radius_y * sin_value / denominator,
+        ))
+
+    mask_draw.polygon(points, fill=255)
+    mask = mask.resize((width, height), Image.LANCZOS)
+    draw.bitmap((left, top), mask, fill=fill)
+
+
+def draw_finder_patterns(draw, matrix_size, outer_color, middle_color):
+    """Replace only the three 7x7 finder footprints with 7/5/3 squircles."""
+    starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
+    for column, row in starts:
+        left = (QUIET + column) * BOX
+        top = (QUIET + row) * BOX
+
+        # Clear only the original 7x7 footprint. This prevents artwork or the
+        # square Segno finder underneath from showing through rounded corners.
+        draw.rectangle(
+            [left, top, left + 7 * BOX - 1, top + 7 * BOX - 1],
+            fill=middle_color,
+        )
+        draw_superellipse(
+            draw,
+            (left, top, left + 7 * BOX, top + 7 * BOX),
+            outer_color,
+        )
+        draw_superellipse(
+            draw,
+            (left + BOX, top + BOX, left + 6 * BOX, top + 6 * BOX),
+            middle_color,
+        )
+        draw_superellipse(
+            draw,
+            (left + 2 * BOX, top + 2 * BOX, left + 5 * BOX, top + 5 * BOX),
+            outer_color,
+        )
+
+
 def analyze_complexity(img):
     gray = img.convert("L")
     stat = ImageStat.Stat(gray)
@@ -691,6 +760,15 @@ def generate_branded_qr(data, art=None, bg_override=None):
             else:
                 white_scale = max(0.35, min(0.85, dot_scale * 0.88))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
+
+    if light_on_dark:
+        draw_finder_patterns(
+            draw, n, (*light_color, 255), (*bg_color, 255)
+        )
+    else:
+        draw_finder_patterns(
+            draw, n, (*dark_color, 255), (*light_color, 255)
+        )
 
     qpx = QUIET * BOX
     draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
@@ -841,6 +919,15 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
                 white_scale = max(0.35, min(0.85, dot_scale * white_scale_factor))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
+    if render_mode == "light_on_dark":
+        draw_finder_patterns(
+            draw, n, (*light_color, 255), (*bg_color, 255)
+        )
+    else:
+        draw_finder_patterns(
+            draw, n, (*dark_color, 255), (*light_color, 255)
+        )
+
     qpx = QUIET * BOX
     draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
     draw.rectangle([0, size - qpx, size, size], fill=(*bg_color, 255))
@@ -906,6 +993,9 @@ def generate_simple_qr(data, logo=None):
 
     img = Image.open(out).convert("RGBA")
     draw = ImageDraw.Draw(img)
+    draw_finder_patterns(
+        draw, len(qr.matrix), (0, 0, 0, 255), (255, 255, 255, 255)
+    )
 
     if logo:
         logo = logo.copy().convert("RGBA")
