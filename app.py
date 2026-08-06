@@ -580,18 +580,40 @@ def extract_artwork_colors(art, background_color, limit=3):
     return [cluster["center"] for cluster in meaningful[:limit]]
 
 
-def choose_finder_pupil_colors(art, background_color, pupil_count=3):
-    """Choose contrasting artwork colors for finder pupils, or white."""
+def choose_finder_pupil_colors(
+    art,
+    background_color,
+    pupil_count=3,
+    fallback_color=(255, 255, 255),
+    surrounding_color=None,
+):
+    """Choose contrasting artwork accents for finder pupils.
+
+    Prefer chromatic candidates when the artwork contains them, then cycle the
+    qualifying palette across the three pupils. Neutral artwork keeps the
+    high-contrast finder color supplied by the renderer.
+    """
     candidates = extract_artwork_colors(art, background_color)
-    background_luminance = relative_luminance(background_color)
+    surrounding_color = surrounding_color or background_color
+    surrounding_luminance = relative_luminance(surrounding_color)
     contrasting = [
         color for color in candidates
-        if contrast_ratio(relative_luminance(color), background_luminance)
+        if contrast_ratio(relative_luminance(color), surrounding_luminance)
         >= FINDER_PUPIL_MIN_CONTRAST
     ]
+    chromatic = [color for color in contrasting if max(color) - min(color) >= 30]
+    if chromatic:
+        contrasting = chromatic
     if not contrasting:
-        return [(255, 255, 255, 255)] * pupil_count
+        return [(*fallback_color, 255)] * pupil_count
     return [(*contrasting[index % len(contrasting)], 255) for index in range(pupil_count)]
+
+
+def choose_finder_pattern_colors(background_color):
+    """Return a black-framed finder palette, except on nearly black ground."""
+    if is_near_black(background_color):
+        return (255, 255, 255), background_color
+    return (0, 0, 0), (255, 255, 255)
 
 
 def normalize_artwork_to_square(art, tolerance=0.12, bg_override=None):
@@ -717,7 +739,14 @@ def draw_superellipse(draw, bounds, fill):
     draw.bitmap((left, top), mask, fill=fill)
 
 
-def draw_finder_patterns(draw, matrix_size, outer_color, middle_color, pupil_colors=None):
+def draw_finder_patterns(
+    draw,
+    matrix_size,
+    outer_color,
+    middle_color,
+    pupil_colors=None,
+    clear_color=None,
+):
     """Replace only the three 7x7 finder footprints with 7/5/3 squircles."""
     starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
     for finder_index, (column, row) in enumerate(starts):
@@ -728,7 +757,7 @@ def draw_finder_patterns(draw, matrix_size, outer_color, middle_color, pupil_col
         # square Segno finder underneath from showing through rounded corners.
         draw.rectangle(
             [left, top, left + 7 * BOX - 1, top + 7 * BOX - 1],
-            fill=middle_color,
+            fill=clear_color or middle_color,
         )
         draw_superellipse(
             draw,
@@ -836,15 +865,21 @@ def generate_branded_qr(data, art=None, bg_override=None):
                 white_scale = max(0.35, min(0.85, dot_scale * 0.88))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
-    if light_on_dark:
-        draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255)
-        )
-    else:
-        pupil_colors = choose_finder_pupil_colors(art, bg_color) if art else None
-        draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
-        )
+    finder_outer, finder_middle = choose_finder_pattern_colors(bg_color)
+    pupil_colors = choose_finder_pupil_colors(
+        art,
+        bg_color,
+        fallback_color=finder_outer,
+        surrounding_color=finder_middle,
+    ) if art else None
+    draw_finder_patterns(
+        draw,
+        n,
+        (*finder_outer, 255),
+        (*finder_middle, 255),
+        pupil_colors,
+        clear_color=(*bg_color, 255),
+    )
 
     qpx = QUIET * BOX
     draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
@@ -995,14 +1030,21 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
                 white_scale = max(0.35, min(0.85, dot_scale * white_scale_factor))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
-    if render_mode == "light_on_dark":
-        draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255)
-        )
-    else:
-        draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255)
-        )
+    finder_outer, finder_middle = choose_finder_pattern_colors(bg_color)
+    pupil_colors = choose_finder_pupil_colors(
+        art,
+        bg_color,
+        fallback_color=finder_outer,
+        surrounding_color=finder_middle,
+    ) if art else None
+    draw_finder_patterns(
+        draw,
+        n,
+        (*finder_outer, 255),
+        (*finder_middle, 255),
+        pupil_colors,
+        clear_color=(*bg_color, 255),
+    )
 
     qpx = QUIET * BOX
     draw.rectangle([0, 0, size, qpx], fill=(*bg_color, 255))
