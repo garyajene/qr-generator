@@ -733,7 +733,7 @@ def draw_superellipse(draw, bounds, fill):
 
 
 def draw_finder_patterns(
-    draw,
+    image,
     matrix_size,
     outer_color,
     middle_color,
@@ -747,27 +747,27 @@ def draw_finder_patterns(
         left = (QUIET + column) * BOX
         top = (QUIET + row) * BOX
 
-        # Clear only the original 7x7 footprint. This prevents artwork or the
-        # square Segno finder underneath from showing through rounded corners.
-        draw.rectangle(
-            [left, top, left + 7 * BOX - 1, top + 7 * BOX - 1],
-            fill=clear_color,
-        )
+        # Compose the complete finder on an isolated background-colored tile.
+        # Replacing the whole footprint prevents square finder pixels from
+        # surviving in the transparent corners of the outer superellipse.
+        tile = Image.new("RGBA", (7 * BOX, 7 * BOX), clear_color)
+        tile_draw = ImageDraw.Draw(tile)
         draw_superellipse(
-            draw,
-            (left, top, left + 7 * BOX, top + 7 * BOX),
+            tile_draw,
+            (0, 0, 7 * BOX, 7 * BOX),
             outer_color,
         )
         draw_superellipse(
-            draw,
-            (left + BOX, top + BOX, left + 6 * BOX, top + 6 * BOX),
+            tile_draw,
+            (BOX, BOX, 6 * BOX, 6 * BOX),
             middle_color,
         )
         draw_superellipse(
-            draw,
-            (left + 2 * BOX, top + 2 * BOX, left + 5 * BOX, top + 5 * BOX),
+            tile_draw,
+            (2 * BOX, 2 * BOX, 5 * BOX, 5 * BOX),
             pupil_colors[finder_index] if pupil_colors else outer_color,
         )
+        image.paste(tile, (left, top))
 
 
 def analyze_complexity(img):
@@ -867,7 +867,7 @@ def generate_branded_qr(data, art=None, bg_override=None):
         # polarity: a black outer anchor and a white inner ring. Finder styling
         # does not need to inherit the polarity used by the ordinary modules.
         draw_finder_patterns(
-            draw,
+            canvas,
             n,
             (0, 0, 0, 255),
             (*light_color, 255),
@@ -879,7 +879,7 @@ def generate_branded_qr(data, art=None, bg_override=None):
             art, bg_color, fallback_color=dark_color, surrounding_color=light_color
         ) if art else None
         draw_finder_patterns(
-            draw,
+            canvas,
             n,
             (*dark_color, 255),
             (*light_color, 255),
@@ -1043,7 +1043,7 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
         # Match production: light-on-dark data modules do not invert the
         # conventional black-and-white finder anchors.
         draw_finder_patterns(
-            draw,
+            canvas,
             n,
             (0, 0, 0, 255),
             (*light_color, 255),
@@ -1055,7 +1055,7 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
             art, bg_color, fallback_color=dark_color, surrounding_color=light_color
         ) if art else None
         draw_finder_patterns(
-            draw,
+            canvas,
             n,
             (*dark_color, 255),
             (*light_color, 255),
@@ -1129,7 +1129,7 @@ def generate_simple_qr(data, logo=None):
     img = Image.open(out).convert("RGBA")
     draw = ImageDraw.Draw(img)
     draw_finder_patterns(
-        draw, len(qr.matrix), (0, 0, 0, 255), (255, 255, 255, 255)
+        img, len(qr.matrix), (0, 0, 0, 255), (255, 255, 255, 255)
     )
 
     if logo:
