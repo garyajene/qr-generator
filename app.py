@@ -855,8 +855,11 @@ def generate_branded_qr(data, art=None, bg_override=None):
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=light_color
         ) if art else None
+        # Keep the data modules light-on-dark, but retain conventional finder
+        # polarity: a black outer anchor and a white inner ring. Finder styling
+        # does not need to inherit the polarity used by the ordinary modules.
         draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255), pupil_colors
+            draw, n, (0, 0, 0, 255), (*light_color, 255), pupil_colors
         )
     else:
         pupil_colors = choose_finder_pupil_colors(
@@ -1019,8 +1022,10 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=light_color
         ) if art else None
+        # Match production: light-on-dark data modules do not invert the
+        # conventional black-and-white finder anchors.
         draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255), pupil_colors
+            draw, n, (0, 0, 0, 255), (*light_color, 255), pupil_colors
         )
     else:
         pupil_colors = choose_finder_pupil_colors(
