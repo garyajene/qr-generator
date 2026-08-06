@@ -41,6 +41,15 @@ def finder_pupil_centers(image):
     return finder_layer_points(image)["pupil"]
 
 
+def finder_footprint_corners(image):
+    matrix_size = image.width // BOX - 2 * QUIET
+    starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
+    return [
+        ((QUIET + column) * BOX, (QUIET + row) * BOX)
+        for column, row in starts
+    ]
+
+
 class ArtworkColorTests(unittest.TestCase):
     def test_chromatic_accents_are_preferred_and_cycled(self):
         art = Image.new("RGBA", (300, 300), (255, 255, 255, 255))
@@ -61,10 +70,14 @@ class ArtworkColorTests(unittest.TestCase):
         outer_colors = [image.getpixel(point)[:3] for point in points["outer"]]
         middle_colors = [image.getpixel(point)[:3] for point in points["middle"]]
         pupil_colors = [image.getpixel(point)[:3] for point in points["pupil"]]
+        corner_colors = [
+            image.getpixel(point)[:3] for point in finder_footprint_corners(image)
+        ]
 
         self.assertEqual([(0, 0, 0)] * 3, outer_colors)
         self.assertEqual([(255, 255, 255)] * 3, middle_colors)
         self.assertEqual([ORANGE] * 3, pupil_colors)
+        self.assertEqual([PURPLE] * 3, corner_colors)
 
     def test_all_diagnostic_versions_use_orange_accent(self):
         art = fedex_style_artwork()
@@ -83,9 +96,14 @@ class ArtworkColorTests(unittest.TestCase):
                 pupil_colors = [
                     image.getpixel(point)[:3] for point in points["pupil"]
                 ]
+                corner_colors = [
+                    image.getpixel(point)[:3]
+                    for point in finder_footprint_corners(image)
+                ]
                 self.assertEqual([(0, 0, 0)] * 3, outer_colors)
                 self.assertEqual([(255, 255, 255)] * 3, middle_colors)
                 self.assertEqual([ORANGE] * 3, pupil_colors)
+                self.assertEqual([PURPLE] * 3, corner_colors)
 
     def test_monochrome_artwork_uses_safe_fallback(self):
         art = Image.new("RGBA", (300, 300), (255, 255, 255, 255))
