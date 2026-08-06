@@ -519,6 +519,81 @@ def choose_background_color(art, bg_override=None):
     return winner
 
 
+# Keep artwork classification in step with the tolerance used by the existing
+# edge/background recoloring pipeline in the preview.
+ARTWORK_BACKGROUND_TOLERANCE = 42
+ARTWORK_CLUSTER_TOLERANCE = 52
+ARTWORK_MIN_CLUSTER_FRACTION = 0.035
+FINDER_PUPIL_MIN_CONTRAST = 3.0
+
+
+def extract_artwork_colors(art, background_color, limit=3):
+    """Return the largest meaningful sampled non-background color regions.
+
+    The background has already been selected by ``choose_background_color``.
+    Work from a modest, regular grid of local samples so large regions, rather
+    than image resolution or isolated pixels, determine the result.
+    """
+    if not art:
+        return []
+
+    test = art.convert("RGBA").resize((300, 300), Image.LANCZOS)
+    grid_size = 30
+    sample_radius = 2
+    samples = []
+    for row in range(grid_size):
+        y = int((row + 0.5) * test.height / grid_size)
+        for column in range(grid_size):
+            x = int((column + 0.5) * test.width / grid_size)
+            color = sample_region_average(test, x, y, radius=sample_radius)
+            if color_distance(color, background_color) > ARTWORK_BACKGROUND_TOLERANCE:
+                samples.append(color)
+
+    if not samples:
+        return []
+
+    # Online clustering lets close antialiasing, shading, and compression
+    # variants contribute to one representative artwork color.
+    clusters = []
+    for color in samples:
+        closest = None
+        closest_distance = None
+        for cluster in clusters:
+            distance = color_distance(color, cluster["center"])
+            if closest_distance is None or distance < closest_distance:
+                closest = cluster
+                closest_distance = distance
+
+        if closest is not None and closest_distance <= ARTWORK_CLUSTER_TOLERANCE:
+            closest["count"] += 1
+            count = closest["count"]
+            closest["center"] = tuple(
+                int(round((closest["center"][channel] * (count - 1) + color[channel]) / count))
+                for channel in range(3)
+            )
+        else:
+            clusters.append({"center": color, "count": 1})
+
+    minimum_count = max(3, math.ceil(len(samples) * ARTWORK_MIN_CLUSTER_FRACTION))
+    meaningful = [cluster for cluster in clusters if cluster["count"] >= minimum_count]
+    meaningful.sort(key=lambda cluster: cluster["count"], reverse=True)
+    return [cluster["center"] for cluster in meaningful[:limit]]
+
+
+def choose_finder_pupil_colors(art, background_color, pupil_count=3):
+    """Choose contrasting artwork colors for finder pupils, or white."""
+    candidates = extract_artwork_colors(art, background_color)
+    background_luminance = relative_luminance(background_color)
+    contrasting = [
+        color for color in candidates
+        if contrast_ratio(relative_luminance(color), background_luminance)
+        >= FINDER_PUPIL_MIN_CONTRAST
+    ]
+    if not contrasting:
+        return [(255, 255, 255, 255)] * pupil_count
+    return [(*contrasting[index % len(contrasting)], 255) for index in range(pupil_count)]
+
+
 def normalize_artwork_to_square(art, tolerance=0.12, bg_override=None):
     if not art:
         return None
@@ -642,10 +717,10 @@ def draw_superellipse(draw, bounds, fill):
     draw.bitmap((left, top), mask, fill=fill)
 
 
-def draw_finder_patterns(draw, matrix_size, outer_color, middle_color):
+def draw_finder_patterns(draw, matrix_size, outer_color, middle_color, pupil_colors=None):
     """Replace only the three 7x7 finder footprints with 7/5/3 squircles."""
     starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
-    for column, row in starts:
+    for finder_index, (column, row) in enumerate(starts):
         left = (QUIET + column) * BOX
         top = (QUIET + row) * BOX
 
@@ -668,7 +743,7 @@ def draw_finder_patterns(draw, matrix_size, outer_color, middle_color):
         draw_superellipse(
             draw,
             (left + 2 * BOX, top + 2 * BOX, left + 5 * BOX, top + 5 * BOX),
-            outer_color,
+            pupil_colors[finder_index] if pupil_colors else outer_color,
         )
 
 
@@ -766,8 +841,9 @@ def generate_branded_qr(data, art=None, bg_override=None):
             draw, n, (*light_color, 255), (*bg_color, 255)
         )
     else:
+        pupil_colors = choose_finder_pupil_colors(art, bg_color) if art else None
         draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255)
+            draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
         )
 
     qpx = QUIET * BOX
