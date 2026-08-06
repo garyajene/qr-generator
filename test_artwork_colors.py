@@ -63,7 +63,7 @@ class ArtworkColorTests(unittest.TestCase):
         self.assertNotEqual(colors[0], colors[1])
         self.assertEqual(colors[0], colors[2])
 
-    def test_dark_production_renderer_uses_orange_accent(self):
+    def test_dark_production_renderer_keeps_inverted_finder_polarity(self):
         image = generate_branded_qr("https://example.com", fedex_style_artwork())
 
         points = finder_layer_points(image)
@@ -74,12 +74,12 @@ class ArtworkColorTests(unittest.TestCase):
             image.getpixel(point)[:3] for point in finder_footprint_corners(image)
         ]
 
-        self.assertEqual([(0, 0, 0)] * 3, outer_colors)
-        self.assertEqual([(255, 255, 255)] * 3, middle_colors)
+        self.assertEqual([(255, 255, 255)] * 3, outer_colors)
+        self.assertEqual([PURPLE] * 3, middle_colors)
         self.assertEqual([ORANGE] * 3, pupil_colors)
         self.assertEqual([PURPLE] * 3, corner_colors)
 
-    def test_all_diagnostic_versions_use_orange_accent(self):
+    def test_all_diagnostic_versions_keep_inverted_finder_polarity(self):
         art = fedex_style_artwork()
         for variant in QR_DIAGNOSTIC_VARIANTS:
             with self.subTest(variant=variant["key"]):
@@ -100,8 +100,8 @@ class ArtworkColorTests(unittest.TestCase):
                     image.getpixel(point)[:3]
                     for point in finder_footprint_corners(image)
                 ]
-                self.assertEqual([(0, 0, 0)] * 3, outer_colors)
-                self.assertEqual([(255, 255, 255)] * 3, middle_colors)
+                self.assertEqual([(255, 255, 255)] * 3, outer_colors)
+                self.assertEqual([PURPLE] * 3, middle_colors)
                 self.assertEqual([ORANGE] * 3, pupil_colors)
                 self.assertEqual([PURPLE] * 3, corner_colors)
 

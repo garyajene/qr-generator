@@ -863,14 +863,15 @@ def generate_branded_qr(data, art=None, bg_override=None):
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=light_color
         ) if art else None
-        # Keep the data modules light-on-dark, but retain conventional finder
-        # polarity: a black outer anchor and a white inner ring. Finder styling
-        # does not need to inherit the polarity used by the ordinary modules.
+        # Finder polarity must agree with the rest of the QR matrix. Mixing a
+        # black-on-white finder with light-on-dark timing and data modules
+        # breaks the continuous 1:1:3:1:1 finder scan line that detectors use.
+        # Keep the rounded styling, but render the layers signal/ground/signal.
         draw_finder_patterns(
             draw,
             n,
-            (0, 0, 0, 255),
             (*light_color, 255),
+            (*bg_color, 255),
             pupil_colors,
             (*bg_color, 255),
         )
@@ -1040,13 +1041,13 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=light_color
         ) if art else None
-        # Match production: light-on-dark data modules do not invert the
-        # conventional black-and-white finder anchors.
+        # Match production's signal/ground/signal finder polarity. A finder
+        # with conventional dark colors cannot be mixed into an inverted QR.
         draw_finder_patterns(
             draw,
             n,
-            (0, 0, 0, 255),
             (*light_color, 255),
+            (*bg_color, 255),
             pupil_colors,
             (*bg_color, 255),
         )
