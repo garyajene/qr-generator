@@ -580,17 +580,32 @@ def extract_artwork_colors(art, background_color, limit=3):
     return [cluster["center"] for cluster in meaningful[:limit]]
 
 
-def choose_finder_pupil_colors(art, background_color, pupil_count=3):
-    """Choose contrasting artwork colors for finder pupils, or white."""
+def choose_finder_pupil_colors(
+    art,
+    background_color,
+    pupil_count=3,
+    fallback_color=(255, 255, 255),
+    surrounding_color=None,
+):
+    """Choose contrasting artwork accents for finder pupils.
+
+    Prefer chromatic candidates when the artwork contains them, then cycle the
+    qualifying palette across the three pupils. Neutral artwork keeps the
+    high-contrast finder color supplied by the renderer.
+    """
     candidates = extract_artwork_colors(art, background_color)
-    background_luminance = relative_luminance(background_color)
+    surrounding_color = surrounding_color or background_color
+    surrounding_luminance = relative_luminance(surrounding_color)
     contrasting = [
         color for color in candidates
-        if contrast_ratio(relative_luminance(color), background_luminance)
+        if contrast_ratio(relative_luminance(color), surrounding_luminance)
         >= FINDER_PUPIL_MIN_CONTRAST
     ]
+    chromatic = [color for color in contrasting if max(color) - min(color) >= 30]
+    if chromatic:
+        contrasting = chromatic
     if not contrasting:
-        return [(255, 255, 255, 255)] * pupil_count
+        return [(*fallback_color, 255)] * pupil_count
     return [(*contrasting[index % len(contrasting)], 255) for index in range(pupil_count)]
 
 
@@ -837,11 +852,16 @@ def generate_branded_qr(data, art=None, bg_override=None):
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
     if light_on_dark:
+        pupil_colors = choose_finder_pupil_colors(
+            art, bg_color, fallback_color=light_color
+        ) if art else None
         draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255)
+            draw, n, (*light_color, 255), (*bg_color, 255), pupil_colors
         )
     else:
-        pupil_colors = choose_finder_pupil_colors(art, bg_color) if art else None
+        pupil_colors = choose_finder_pupil_colors(
+            art, bg_color, fallback_color=dark_color, surrounding_color=light_color
+        ) if art else None
         draw_finder_patterns(
             draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
         )
@@ -996,12 +1016,18 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
     if render_mode == "light_on_dark":
+        pupil_colors = choose_finder_pupil_colors(
+            art, bg_color, fallback_color=light_color
+        ) if art else None
         draw_finder_patterns(
-            draw, n, (*light_color, 255), (*bg_color, 255)
+            draw, n, (*light_color, 255), (*bg_color, 255), pupil_colors
         )
     else:
+        pupil_colors = choose_finder_pupil_colors(
+            art, bg_color, fallback_color=dark_color, surrounding_color=light_color
+        ) if art else None
         draw_finder_patterns(
-            draw, n, (*dark_color, 255), (*light_color, 255)
+            draw, n, (*dark_color, 255), (*light_color, 255), pupil_colors
         )
 
     qpx = QUIET * BOX
