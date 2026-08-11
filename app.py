@@ -172,7 +172,12 @@ def init_database():
 
         conn.execute(text("""
             ALTER TABLE profiles
-            ADD COLUMN IF NOT EXISTS pay_button_color TEXT DEFAULT '#16833b'
+            ADD COLUMN IF NOT EXISTS pay_button_color TEXT DEFAULT '#00D900'
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ALTER COLUMN pay_button_color SET DEFAULT '#00D900'
         """))
 
         conn.execute(text("""
@@ -4143,7 +4148,7 @@ BUTTN_PROFILES = {
         "action_bg_color": "#ffffff",
         "action_text_color": "#111111",
         "action_border_color": "#d8dde6",
-        "pay_button_color": "#16833b",
+        "pay_button_color": "#00D900",
         "payment_links": [],
         "lead_capture_enabled": False,
         "lead_capture_headline": "Stay Connected",
@@ -4420,7 +4425,7 @@ def _safe_payment_url(value):
 
 
 def _payment_text_color(background):
-    rgb = parse_hex_color(background) or (22, 131, 59)
+    rgb = parse_hex_color(background) or (0, 217, 0)
     return "#111111" if relative_luminance(rgb) > 0.48 else "#ffffff"
 
 
@@ -5244,7 +5249,7 @@ def buttn_public_profile(username):
     safe_action_bg = _clean_hex(profile.get("action_bg_color"), "#ffffff")
     safe_action_text = _clean_hex(profile.get("action_text_color"), "#111111")
     safe_action_border = _clean_hex(profile.get("action_border_color"), "#d8dde6")
-    safe_pay_bg = _clean_hex(profile.get("pay_button_color"), "#16833b")
+    safe_pay_bg = _clean_hex(profile.get("pay_button_color"), "#00D900")
     safe_pay_text = _payment_text_color(safe_pay_bg)
 
     try:
@@ -5431,7 +5436,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .profile-title {{ font-size: 15px; color:{safe_header_title_color}; margin-top: 6px; }}
 .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 .action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
-.pay-action-btn {{ color:{safe_pay_text}; background:{safe_pay_bg}; border-color:{safe_pay_bg}; font-weight:900; box-shadow:0 5px 14px rgba(0,0,0,.16); cursor:pointer; font-family:inherit; }}
+.pay-action-btn {{ display:inline-flex; align-items:center; justify-content:center; color:{safe_pay_text}; background:{safe_pay_bg}; border-color:{safe_pay_bg}; padding:12px 20px; font-size:17px; line-height:1.2; font-weight:900; white-space:nowrap; box-shadow:0 5px 14px rgba(0,0,0,.16); cursor:pointer; font-family:inherit; }}
 .payment-modal {{ display:none; position:fixed; inset:0; z-index:100000; align-items:center; justify-content:center; padding:20px; }}
 .payment-modal.show {{ display:flex; }}
 .payment-backdrop {{ position:absolute; inset:0; width:100%; border:0; background:rgba(0,0,0,.58); cursor:pointer; }}
@@ -5715,7 +5720,7 @@ def buttn_edit_profile(username):
         profile["action_bg_color"] = _clean_hex(request.form.get("action_bg_color"), "#ffffff")
         profile["action_text_color"] = _clean_hex(request.form.get("action_text_color"), "#111111")
         profile["action_border_color"] = _clean_hex(request.form.get("action_border_color"), "#d8dde6")
-        profile["pay_button_color"] = _clean_hex(request.form.get("pay_button_color"), "#16833b")
+        profile["pay_button_color"] = _clean_hex(request.form.get("pay_button_color"), "#00D900")
         profile["lead_capture_enabled"] = (request.form.get("lead_capture_enabled") == "on")
         profile["lead_capture_headline"] = (request.form.get("lead_capture_headline") or "Stay Connected").strip()[:120]
         profile["lead_capture_button_text"] = (request.form.get("lead_capture_button_text") or "Submit").strip()[:60]
@@ -5923,7 +5928,13 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
         <h2>PAYMENTS</h2>
         <div class="small-help" style="margin-bottom:14px;">Add only the external payment links you use. BUTTN does not process payments or collect payment credentials.</div>
         {payment_inputs}
-        <div class="field"><label>Pay Button Color</label><input id="pay_button_color_input" type="color" name="pay_button_color" value="{val('pay_button_color', '#16833b')}"><div class="small-help">Defaults to green; Pay text automatically switches for readable contrast.</div></div>
+        <div class="field">
+          <label for="pay_button_color_input">Pay Button Color</label>
+          <input id="pay_button_color_input" type="color" name="pay_button_color" value="{val('pay_button_color', '#00D900')}">
+          <label for="pay_button_hex_input">HEX</label>
+          <input id="pay_button_hex_input" type="text" value="{val('pay_button_color', '#00D900').upper()}" inputmode="text" autocomplete="off" maxlength="7" pattern="#[0-9A-Fa-f]{{6}}" placeholder="#00D900" aria-describedby="pay_button_color_help">
+          <div id="pay_button_color_help" class="small-help">Enter a 6-digit HEX color. Pay text automatically switches for readable contrast.</div>
+        </div>
       </div>
       <div class="panel">
         <h2>Lead Capture</h2>
@@ -6158,7 +6169,7 @@ function renderLivePreview() {{
     const actionBg = getVal("action_bg_color_input", "#ffffff");
     const actionText = getVal("action_text_color_input", "#111111");
     const actionBorder = getVal("action_border_color_input", "#d8dde6");
-    const payButtonColor = getVal("pay_button_color_input", "#16833b");
+    const payButtonColor = getVal("pay_button_color_input", "#00D900");
     const leadCaptureEnabled = !!(getEl("lead_capture_enabled_input") && getEl("lead_capture_enabled_input").checked);
     const leadHeadline = getVal("lead_capture_headline_input", "Stay Connected");
     const leadButtonText = getVal("lead_capture_button_text_input", "Submit");
@@ -6230,7 +6241,7 @@ function renderLivePreview() {{
 #live_buttn_preview .profile-title {{ font-size: 15px; color:${{headerTitleColor}}; margin-top: 6px; }}
 #live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 #live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
-#live_buttn_preview .pay-action-btn {{ color:${{readableTextColor(payButtonColor)}}; background:${{payButtonColor}}; border-color:${{payButtonColor}}; font-weight:900; box-shadow:0 5px 14px rgba(0,0,0,.16); }}
+#live_buttn_preview .pay-action-btn {{ display:inline-flex; align-items:center; justify-content:center; color:${{readableTextColor(payButtonColor)}}; background:${{payButtonColor}}; border-color:${{payButtonColor}}; padding:12px 20px; font-size:17px; line-height:1.2; font-weight:900; white-space:nowrap; box-shadow:0 5px 14px rgba(0,0,0,.16); }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 #live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}\n#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
@@ -6267,6 +6278,30 @@ function renderLivePreview() {{
   <div class="links-area">${{spotlightHtml}}${{collectLinks()}}${{leadCaptureEnabled ? `<div class="lead-capture-card"><h2>${{escapeHtml(leadHeadline)}}</h2><form><input type="text" placeholder="Your name"><input type="email" placeholder="Your email" required><input type="tel" placeholder="Phone (optional)"><button type="button">${{escapeHtml(leadButtonText)}}</button></form></div>` : ""}}</div>
   <div class="buttn-footer">Powered by {_buttn_logo_html("black", "buttn-footer-logo")}</div>
 </div>`;
+}}
+
+const payButtonColorInput = getEl("pay_button_color_input");
+const payButtonHexInput = getEl("pay_button_hex_input");
+if (payButtonColorInput && payButtonHexInput) {{
+    payButtonColorInput.addEventListener("input", function() {{
+        payButtonHexInput.value = payButtonColorInput.value.toUpperCase();
+        payButtonHexInput.setCustomValidity("");
+        payButtonHexInput.removeAttribute("aria-invalid");
+    }});
+    payButtonHexInput.addEventListener("input", function() {{
+        const value = payButtonHexInput.value.trim();
+        if (/^#[0-9A-Fa-f]{{6}}$/.test(value)) {{
+            const normalized = value.toUpperCase();
+            payButtonHexInput.value = normalized;
+            payButtonColorInput.value = normalized;
+            payButtonHexInput.setCustomValidity("");
+            payButtonHexInput.removeAttribute("aria-invalid");
+            renderLivePreview();
+        }} else {{
+            payButtonHexInput.setCustomValidity("Enter a 6-digit HEX color, such as #00D900.");
+            payButtonHexInput.setAttribute("aria-invalid", "true");
+        }}
+    }});
 }}
 
 [
