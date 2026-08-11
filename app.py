@@ -697,6 +697,11 @@ def matrix_from_segno(qr):
 FINDER_SUPERELLIPSE_EXPONENT = 5.0
 FINDER_SUPERSAMPLE = 4
 
+# The diagnostic lab deliberately uses a smaller, independently sized finder
+# assembly. Production keeps its existing 7/5/3-module geometry.
+DIAGNOSTIC_FINDER_PREVIOUS_MODULES = (7.0, 5.0, 3.0)
+DIAGNOSTIC_FINDER_MODULES = (6.0, 30.0 / 7.0, 18.0 / 7.0)
+
 
 def draw_superellipse(draw, bounds, fill):
     """Draw a clipped, antialiased superellipse without crossing its bounds."""
@@ -766,6 +771,44 @@ def draw_finder_patterns(
         draw_superellipse(
             draw,
             (left + 2 * BOX, top + 2 * BOX, left + 5 * BOX, top + 5 * BOX),
+            pupil_colors[finder_index] if pupil_colors else outer_color,
+        )
+
+
+def draw_diagnostic_finder_patterns(
+    draw,
+    matrix_size,
+    outer_color,
+    middle_color,
+    pupil_colors=None,
+    footprint_color=None,
+):
+    """Draw test-only finders, scaled concentrically within their positions."""
+    starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
+    layer_modules = DIAGNOSTIC_FINDER_MODULES
+
+    for finder_index, (column, row) in enumerate(starts):
+        center_x = (QUIET + column + 3.5) * BOX
+        center_y = (QUIET + row + 3.5) * BOX
+        layer_bounds = []
+        for modules in layer_modules:
+            radius = modules * BOX / 2.0
+            layer_bounds.append((
+                center_x - radius,
+                center_y - radius,
+                center_x + radius,
+                center_y + radius,
+            ))
+
+        draw.rectangle(
+            layer_bounds[0],
+            fill=footprint_color if footprint_color is not None else middle_color,
+        )
+        draw_superellipse(draw, layer_bounds[0], outer_color)
+        draw_superellipse(draw, layer_bounds[1], middle_color)
+        draw_superellipse(
+            draw,
+            layer_bounds[2],
             pupil_colors[finder_index] if pupil_colors else outer_color,
         )
 
@@ -901,7 +944,7 @@ QR_DIAGNOSTIC_VARIANTS = [
     {
         "key": "A",
         "name": "Current production renderer",
-        "description": "No changes. This calls the same renderer used by /generate.",
+        "description": "Production-equivalent rendering with the test-only smaller finder treatment.",
     },
     {
         "key": "B",
@@ -950,14 +993,10 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
     """
     Developer-only diagnostic clone of generate_branded_qr.
 
-    Version A intentionally delegates to production. Other versions keep the
-    same data, normalized artwork, selected background, sizing, QR matrix, and
-    export dimensions while changing exactly one rendering variable.
+    All versions keep the same data, normalized artwork, selected background,
+    sizing, QR matrix, and export dimensions. Finder sizing is test-only.
     """
     variant = variant or {}
-    if variant.get("key") == "A":
-        return generate_branded_qr(data, art, bg_override=bg_override)
-
     mask = variant.get("mask")
     if mask is None:
         qr = segno.make(data, error=ERROR_LEVEL)
@@ -976,6 +1015,7 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
     draw = ImageDraw.Draw(canvas)
 
     dot_scale = 0.48
+    art_resized = None
 
     if art:
         complexity = analyze_complexity(art)
@@ -988,6 +1028,9 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
     white_scale_factor = variant.get("white_scale_factor", 0.88)
     protected_shape = variant.get("protected_shape", "rectangle")
     render_mode = variant.get("render_mode", "production")
+    if variant.get("key") == "A" and should_use_light_on_dark_qr(bg_color):
+        render_mode = "light_on_dark"
+        dot_scale = max(0.20, min(0.95, dot_scale + 0.14))
     data_shape = variant.get("data_shape", "dot")
 
     def draw_dot(x0, y0, x1, y1, scale, color):
@@ -1037,13 +1080,32 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
                 white_scale = max(0.35, min(0.85, dot_scale * white_scale_factor))
                 draw_dot(x0, y0, x1, y1, white_scale, (*light_color, 255))
 
+    # Restore the diagnostic artwork beneath the old 7x7 footprints before
+    # applying the smaller assembly. This prevents the original protected
+    # finder modules from showing around the reduced superellipse.
+    for column, row in ((0, 0), (n - 7, 0), (0, n - 7)):
+        left = (QUIET + column) * BOX
+        top = (QUIET + row) * BOX
+        if art_resized is None:
+            draw.rectangle(
+                [left, top, left + 7 * BOX - 1, top + 7 * BOX - 1],
+                fill=(*bg_color, 255),
+            )
+        else:
+            art_left = column * BOX
+            art_top = row * BOX
+            footprint = art_resized.crop(
+                (art_left, art_top, art_left + 7 * BOX, art_top + 7 * BOX)
+            )
+            canvas.paste(footprint, (left, top), footprint)
+
     if render_mode == "light_on_dark":
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=light_color
         ) if art else None
         # Match production's signal/ground/signal finder polarity. A finder
         # with conventional dark colors cannot be mixed into an inverted QR.
-        draw_finder_patterns(
+        draw_diagnostic_finder_patterns(
             draw,
             n,
             (*light_color, 255),
@@ -1055,7 +1117,7 @@ def generate_branded_qr_diagnostic_variant(data, art=None, bg_override=None, var
         pupil_colors = choose_finder_pupil_colors(
             art, bg_color, fallback_color=dark_color, surrounding_color=light_color
         ) if art else None
-        draw_finder_patterns(
+        draw_diagnostic_finder_patterns(
             draw,
             n,
             (*dark_color, 255),
