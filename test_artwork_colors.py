@@ -4,8 +4,6 @@ from PIL import Image, ImageDraw
 
 from app import (
     BOX,
-    DIAGNOSTIC_FINDER_MODULES,
-    DIAGNOSTIC_FINDER_PREVIOUS_MODULES,
     QUIET,
     QR_DIAGNOSTIC_VARIANTS,
     choose_finder_pupil_colors,
@@ -41,19 +39,6 @@ def finder_layer_points(image):
 
 def finder_pupil_centers(image):
     return finder_layer_points(image)["pupil"]
-
-
-def diagnostic_finder_layer_points(image):
-    matrix_size = image.width // BOX - 2 * QUIET
-    starts = ((0, 0), (matrix_size - 7, 0), (0, matrix_size - 7))
-    layers = {"outer": [], "middle": [], "pupil": []}
-    offsets = {"outer": 0.75, "middle": 1.6, "pupil": 3.5}
-    for column, row in starts:
-        left = (QUIET + column) * BOX
-        center_y = int((QUIET + row + 3.5) * BOX)
-        for layer, offset in offsets.items():
-            layers[layer].append((int(left + offset * BOX), center_y))
-    return layers
 
 
 def finder_footprint_corners(image):
@@ -101,7 +86,7 @@ class ArtworkColorTests(unittest.TestCase):
                 image = generate_branded_qr_diagnostic_variant(
                     "https://example.com", art.copy(), variant=variant
                 )
-                points = diagnostic_finder_layer_points(image)
+                points = finder_layer_points(image)
                 outer_colors = [
                     image.getpixel(point)[:3] for point in points["outer"]
                 ]
@@ -111,23 +96,14 @@ class ArtworkColorTests(unittest.TestCase):
                 pupil_colors = [
                     image.getpixel(point)[:3] for point in points["pupil"]
                 ]
+                corner_colors = [
+                    image.getpixel(point)[:3]
+                    for point in finder_footprint_corners(image)
+                ]
                 self.assertEqual([(255, 255, 255)] * 3, outer_colors)
                 self.assertEqual([PURPLE] * 3, middle_colors)
                 self.assertEqual([ORANGE] * 3, pupil_colors)
-
-    def test_diagnostic_finders_are_proportionally_reduced(self):
-        scale_factors = [
-            new / previous
-            for previous, new in zip(
-                DIAGNOSTIC_FINDER_PREVIOUS_MODULES,
-                DIAGNOSTIC_FINDER_MODULES,
-            )
-        ]
-
-        self.assertEqual((7.0, 5.0, 3.0), DIAGNOSTIC_FINDER_PREVIOUS_MODULES)
-        self.assertAlmostEqual(6.0 / 7.0, scale_factors[0])
-        self.assertAlmostEqual(scale_factors[0], scale_factors[1])
-        self.assertAlmostEqual(scale_factors[0], scale_factors[2])
+                self.assertEqual([PURPLE] * 3, corner_colors)
 
     def test_monochrome_artwork_uses_safe_fallback(self):
         art = Image.new("RGBA", (300, 300), (255, 255, 255, 255))
