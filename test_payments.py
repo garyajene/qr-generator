@@ -72,7 +72,7 @@ def test_public_and_live_preview_use_larger_pay_button_styles():
         app.BUTTN_PROFILES.pop("payment-style-test", None)
 
 
-def test_public_and_live_preview_compact_only_call_and_email_actions():
+def test_public_and_live_preview_keep_contact_actions_equal_and_pay_larger():
     profile = dict(app.BUTTN_PROFILES["test"])
     profile["phone"] = "+15551234567"
     profile["email"] = "hello@example.com"
@@ -85,11 +85,16 @@ def test_public_and_live_preview_compact_only_call_and_email_actions():
         editor_page = app.app.test_client().get("/buttn/edit/test").get_data(as_text=True)
 
         for page in (public_page, editor_page):
-            assert 'class="action-btn compact-action-btn" href="tel:' in page
-            assert 'class="action-btn compact-action-btn" href="mailto:' in page
-            assert "compact-action-btn { display:inline-flex; align-items:center; justify-content:center; min-width:64px; padding:8px 12px; font-size:13px; line-height:1.2; }" in page
+            assert 'class="action-btn" href="tel:' in page
+            assert 'class="action-btn" href="mailto:' in page
+            assert "compact-action-btn" not in page
+            assert "actions { display:flex; align-items:center;" in page
+            assert "action-btn { text-decoration:none;" in page
+            assert "padding:10px 17px; font-weight:700; font-size:14px" in page
             assert 'class="action-btn pay-action-btn"' in page
+            assert "padding:12px 20px; font-size:17px" in page
+            assert 'class="action-btn" href="#">Contact Info</a>' in page or \
+                'class="action-btn" href="/buttn/contact/' in page
             assert '>Contact Info</a>' in page
-            assert 'class="action-btn compact-action-btn" href="#">Contact Info</a>' not in page
     finally:
         app.BUTTN_PROFILES.pop("compact-action-test", None)
