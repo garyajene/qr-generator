@@ -70,3 +70,26 @@ def test_public_and_live_preview_use_larger_pay_button_styles():
             assert "white-space:nowrap" in page
     finally:
         app.BUTTN_PROFILES.pop("payment-style-test", None)
+
+
+def test_public_and_live_preview_compact_only_call_and_email_actions():
+    profile = dict(app.BUTTN_PROFILES["test"])
+    profile["phone"] = "+15551234567"
+    profile["email"] = "hello@example.com"
+    profile["payment_links"] = [
+        {"service": "venmo", "service_name": "", "url": "https://venmo.com/u/example"}
+    ]
+    app.BUTTN_PROFILES["compact-action-test"] = profile
+    try:
+        public_page = app.app.test_client().get("/buttn/compact-action-test").get_data(as_text=True)
+        editor_page = app.app.test_client().get("/buttn/edit/test").get_data(as_text=True)
+
+        for page in (public_page, editor_page):
+            assert 'class="action-btn compact-action-btn" href="tel:' in page
+            assert 'class="action-btn compact-action-btn" href="mailto:' in page
+            assert "compact-action-btn { display:inline-flex; align-items:center; justify-content:center; min-width:64px; padding:8px 12px; font-size:13px; line-height:1.2; }" in page
+            assert 'class="action-btn pay-action-btn"' in page
+            assert '>Contact Info</a>' in page
+            assert 'class="action-btn compact-action-btn" href="#">Contact Info</a>' not in page
+    finally:
+        app.BUTTN_PROFILES.pop("compact-action-test", None)

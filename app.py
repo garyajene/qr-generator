@@ -5264,7 +5264,7 @@ def buttn_public_profile(username):
 
     action_buttons = ""
     if safe_phone:
-        action_buttons += f'<a class="action-btn" href="tel:{safe_phone}">Call</a>'
+        action_buttons += f'<a class="action-btn compact-action-btn" href="tel:{safe_phone}">Call</a>'
     payment_links = []
     payment_labels = dict(PAYMENT_SERVICES)
     for item in profile.get("payment_links", []):
@@ -5280,7 +5280,7 @@ def buttn_public_profile(username):
         payment_choices = "".join(f'<a href="{html.escape(item["url"])}" target="_blank" rel="noopener noreferrer">{html.escape(item["label"])}</a>' for item in payment_links)
         payment_modal_html = f'''<div id="payment-choice-modal" class="payment-modal" aria-hidden="true"><button class="payment-backdrop" type="button" onclick="closePaymentChoices()" aria-label="Close payment choices"></button><div class="payment-card" role="dialog" aria-modal="true" aria-labelledby="payment-choice-title"><button class="payment-close" type="button" onclick="closePaymentChoices()" aria-label="Close">×</button><h2 id="payment-choice-title">Choose how you'd like to pay</h2><div class="payment-choices">{payment_choices}</div></div></div>'''
     if safe_email:
-        action_buttons += f'<a class="action-btn" href="mailto:{safe_email}">Email</a>'
+        action_buttons += f'<a class="action-btn compact-action-btn" href="mailto:{safe_email}">Email</a>'
     action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Contact Info</a>'
 
     links_html = ""
@@ -5436,6 +5436,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .profile-title {{ font-size: 15px; color:{safe_header_title_color}; margin-top: 6px; }}
 .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 .action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+.compact-action-btn {{ display:inline-flex; align-items:center; justify-content:center; min-width:64px; padding:8px 12px; font-size:13px; line-height:1.2; }}
 .pay-action-btn {{ display:inline-flex; align-items:center; justify-content:center; color:{safe_pay_text}; background:{safe_pay_bg}; border-color:{safe_pay_bg}; padding:12px 20px; font-size:17px; line-height:1.2; font-weight:900; white-space:nowrap; box-shadow:0 5px 14px rgba(0,0,0,.16); cursor:pointer; font-family:inherit; }}
 .payment-modal {{ display:none; position:fixed; inset:0; z-index:100000; align-items:center; justify-content:center; padding:20px; }}
 .payment-modal.show {{ display:flex; }}
@@ -6198,12 +6199,12 @@ function renderLivePreview() {{
         : "";
 
     let actions = "";
-    if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
+    if (phone.trim()) actions += `<a class="action-btn compact-action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
     const paymentUrls = Array.from(document.querySelectorAll(".payment-url-input"))
         .map(function(input) {{ return String(input.value || "").trim(); }})
         .filter(function(value) {{ try {{ const parsed = new URL(value); return parsed.protocol === "http:" || parsed.protocol === "https:"; }} catch (err) {{ return false; }} }});
     if (paymentUrls.length) actions += `<a class="action-btn pay-action-btn" href="${{paymentUrls.length === 1 ? escapeHtml(paymentUrls[0]) : "#"}}">$&nbsp; Pay</a>`;
-    if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
+    if (email.trim()) actions += `<a class="action-btn compact-action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
     actions += '<a class="action-btn" href="#">Contact Info</a>';
 
     let spotlightHtml = "";
@@ -6241,6 +6242,7 @@ function renderLivePreview() {{
 #live_buttn_preview .profile-title {{ font-size: 15px; color:${{headerTitleColor}}; margin-top: 6px; }}
 #live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 #live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+#live_buttn_preview .compact-action-btn {{ display:inline-flex; align-items:center; justify-content:center; min-width:64px; padding:8px 12px; font-size:13px; line-height:1.2; }}
 #live_buttn_preview .pay-action-btn {{ display:inline-flex; align-items:center; justify-content:center; color:${{readableTextColor(payButtonColor)}}; background:${{payButtonColor}}; border-color:${{payButtonColor}}; padding:12px 20px; font-size:17px; line-height:1.2; font-weight:900; white-space:nowrap; box-shadow:0 5px 14px rgba(0,0,0,.16); }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
