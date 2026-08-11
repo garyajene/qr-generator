@@ -159,6 +159,23 @@ def init_database():
         """))
 
         conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS profile_payment_links (
+                id SERIAL PRIMARY KEY,
+                profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                service TEXT NOT NULL,
+                service_name TEXT DEFAULT '',
+                url TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE profiles
+            ADD COLUMN IF NOT EXISTS pay_button_color TEXT DEFAULT '#16833b'
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profile_views (
                 id SERIAL PRIMARY KEY,
                 profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -3698,9 +3715,16 @@ def _load_db_profile(username):
                 WHERE profile_id = :profile_id
                 ORDER BY sort_order ASC, id ASC
             """), {"profile_id": profile["id"]}).mappings().all()
+            payment_links = conn.execute(text("""
+                SELECT service, service_name, url
+                FROM profile_payment_links
+                WHERE profile_id = :profile_id
+                ORDER BY sort_order ASC, id ASC
+            """), {"profile_id": profile["id"]}).mappings().all()
         data = dict(profile)
         data["buttn_url"] = data.get("username", username)
         data["links"] = [dict(item) for item in links]
+        data["payment_links"] = [dict(item) for item in payment_links]
         return data
     except Exception:
         return None
@@ -3715,7 +3739,7 @@ def _save_db_profile(username, profile, user_id):
     try:
         init_database()
         save_data = dict(profile)
-        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "lead_capture_headline", "lead_capture_button_text", "spotlight_image_b64", "spotlight_headline", "spotlight_subtext", "spotlight_url", "spotlight_open_behavior", "spotlight_media_shape"]:
+        for key in ["name", "title", "phone", "email", "logo_b64", "header_image_b64", "header_bg_color", "header_image_opacity", "page_bg_color", "link_bg_color", "link_text_color", "link_border_color", "header_name_color", "header_title_color", "action_bg_color", "action_text_color", "action_border_color", "pay_button_color", "lead_capture_headline", "lead_capture_button_text", "spotlight_image_b64", "spotlight_headline", "spotlight_subtext", "spotlight_url", "spotlight_open_behavior", "spotlight_media_shape"]:
             save_data.setdefault(key, "")
         save_data["lead_capture_enabled"] = bool(save_data.get("lead_capture_enabled"))
         save_data["spotlight_enabled"] = bool(save_data.get("spotlight_enabled"))
@@ -3740,6 +3764,7 @@ def _save_db_profile(username, profile, user_id):
                         link_bg_color=:link_bg_color, link_text_color=:link_text_color, link_border_color=:link_border_color,
                         header_name_color=:header_name_color, header_title_color=:header_title_color, action_bg_color=:action_bg_color,
                         action_text_color=:action_text_color, action_border_color=:action_border_color,
+                        pay_button_color=:pay_button_color,
                         lead_capture_enabled=:lead_capture_enabled, lead_capture_headline=:lead_capture_headline,
                         lead_capture_button_text=:lead_capture_button_text,
                         spotlight_enabled=:spotlight_enabled, spotlight_image_b64=:spotlight_image_b64,
@@ -3751,14 +3776,17 @@ def _save_db_profile(username, profile, user_id):
                     WHERE id=:profile_id
                 """), {**save_data, "profile_id": profile_id})
                 conn.execute(text("DELETE FROM profile_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
+                conn.execute(text("DELETE FROM profile_payment_links WHERE profile_id=:profile_id"), {"profile_id": profile_id})
             else:
                 profile_id = conn.execute(text("""
-                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play, spotlight_open_behavior, spotlight_media_shape, spotlight_autoplay)
-                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play, :spotlight_open_behavior, :spotlight_media_shape, :spotlight_autoplay)
+                    INSERT INTO profiles (user_id, username, name, title, phone, email, logo_b64, header_image_b64, header_bg_color, header_image_opacity, page_bg_color, link_bg_color, link_text_color, link_border_color, header_name_color, header_title_color, action_bg_color, action_text_color, action_border_color, pay_button_color, lead_capture_enabled, lead_capture_headline, lead_capture_button_text, spotlight_enabled, spotlight_image_b64, spotlight_headline, spotlight_subtext, spotlight_url, spotlight_show_play, spotlight_open_behavior, spotlight_media_shape, spotlight_autoplay)
+                    VALUES (:user_id, :username, :name, :title, :phone, :email, :logo_b64, :header_image_b64, :header_bg_color, :header_image_opacity, :page_bg_color, :link_bg_color, :link_text_color, :link_border_color, :header_name_color, :header_title_color, :action_bg_color, :action_text_color, :action_border_color, :pay_button_color, :lead_capture_enabled, :lead_capture_headline, :lead_capture_button_text, :spotlight_enabled, :spotlight_image_b64, :spotlight_headline, :spotlight_subtext, :spotlight_url, :spotlight_show_play, :spotlight_open_behavior, :spotlight_media_shape, :spotlight_autoplay)
                     RETURNING id
                 """), {**save_data, "user_id": user_id, "username": username}).scalar_one()
             for idx, item in enumerate(profile.get("links", [])):
                 conn.execute(text("INSERT INTO profile_links (profile_id, sort_order, icon, label, url) VALUES (:profile_id, :sort_order, :icon, :label, :url)"), {"profile_id": profile_id, "sort_order": idx, "icon": item.get("icon", "custom"), "label": item.get("label", ""), "url": item.get("url", "")})
+            for idx, item in enumerate(profile.get("payment_links", [])):
+                conn.execute(text("INSERT INTO profile_payment_links (profile_id, sort_order, service, service_name, url) VALUES (:profile_id, :sort_order, :service, :service_name, :url)"), {"profile_id": profile_id, "sort_order": idx, "service": item.get("service", "other"), "service_name": item.get("service_name", ""), "url": item.get("url", "")})
         return True
     except Exception:
         return False
@@ -4115,6 +4143,8 @@ BUTTN_PROFILES = {
         "action_bg_color": "#ffffff",
         "action_text_color": "#111111",
         "action_border_color": "#d8dde6",
+        "pay_button_color": "#16833b",
+        "payment_links": [],
         "lead_capture_enabled": False,
         "lead_capture_headline": "Stay Connected",
         "lead_capture_button_text": "Submit",
@@ -4363,6 +4393,35 @@ def _safe_url(value):
     if value.startswith("http://") or value.startswith("https://") or value.startswith("mailto:") or value.startswith("tel:"):
         return value
     return "https://" + value
+
+
+PAYMENT_SERVICES = [
+    ("cash_app", "Cash App"),
+    ("venmo", "Venmo"),
+    ("paypal", "PayPal"),
+    ("stripe", "Stripe Payment Link"),
+    ("square", "Square Payment Link"),
+    ("other", "Other Payment Link"),
+]
+
+
+def _safe_payment_url(value):
+    """Accept only complete external HTTP(S) payment links."""
+    value = (value or "").strip()
+    try:
+        parsed = urllib.parse.urlsplit(value)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return ""
+    if parsed.username or parsed.password:
+        return ""
+    return value
+
+
+def _payment_text_color(background):
+    rgb = parse_hex_color(background) or (22, 131, 59)
+    return "#111111" if relative_luminance(rgb) > 0.48 else "#ffffff"
 
 
 def _normalize_spotlight_open_behavior(value):
@@ -5185,6 +5244,8 @@ def buttn_public_profile(username):
     safe_action_bg = _clean_hex(profile.get("action_bg_color"), "#ffffff")
     safe_action_text = _clean_hex(profile.get("action_text_color"), "#111111")
     safe_action_border = _clean_hex(profile.get("action_border_color"), "#d8dde6")
+    safe_pay_bg = _clean_hex(profile.get("pay_button_color"), "#16833b")
+    safe_pay_text = _payment_text_color(safe_pay_bg)
 
     try:
         opacity = max(0, min(100, int(profile.get("header_image_opacity") or 35))) / 100
@@ -5199,6 +5260,20 @@ def buttn_public_profile(username):
     action_buttons = ""
     if safe_phone:
         action_buttons += f'<a class="action-btn" href="tel:{safe_phone}">Call</a>'
+    payment_links = []
+    payment_labels = dict(PAYMENT_SERVICES)
+    for item in profile.get("payment_links", []):
+        destination = _safe_payment_url(item.get("url"))
+        if destination:
+            label = (item.get("service_name") or payment_labels.get(item.get("service")) or "Payment Link").strip()
+            payment_links.append({"label": label, "url": destination})
+    payment_modal_html = ""
+    if len(payment_links) == 1:
+        action_buttons += f'<a class="action-btn pay-action-btn" href="{html.escape(payment_links[0]["url"])}" target="_blank" rel="noopener noreferrer">$&nbsp; Pay</a>'
+    elif payment_links:
+        action_buttons += '<button class="action-btn pay-action-btn" type="button" onclick="openPaymentChoices()">$&nbsp; Pay</button>'
+        payment_choices = "".join(f'<a href="{html.escape(item["url"])}" target="_blank" rel="noopener noreferrer">{html.escape(item["label"])}</a>' for item in payment_links)
+        payment_modal_html = f'''<div id="payment-choice-modal" class="payment-modal" aria-hidden="true"><button class="payment-backdrop" type="button" onclick="closePaymentChoices()" aria-label="Close payment choices"></button><div class="payment-card" role="dialog" aria-modal="true" aria-labelledby="payment-choice-title"><button class="payment-close" type="button" onclick="closePaymentChoices()" aria-label="Close">×</button><h2 id="payment-choice-title">Choose how you'd like to pay</h2><div class="payment-choices">{payment_choices}</div></div></div>'''
     if safe_email:
         action_buttons += f'<a class="action-btn" href="mailto:{safe_email}">Email</a>'
     action_buttons += f'<a class="action-btn" href="/buttn/contact/{html.escape(_normalize_buttn_url(username))}">Contact Info</a>'
@@ -5356,6 +5431,15 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .profile-title {{ font-size: 15px; color:{safe_header_title_color}; margin-top: 6px; }}
 .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 .action-btn {{ text-decoration:none; color:{safe_action_text}; background:{safe_action_bg}; border:1px solid {safe_action_border}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+.pay-action-btn {{ color:{safe_pay_text}; background:{safe_pay_bg}; border-color:{safe_pay_bg}; font-weight:900; box-shadow:0 5px 14px rgba(0,0,0,.16); cursor:pointer; font-family:inherit; }}
+.payment-modal {{ display:none; position:fixed; inset:0; z-index:100000; align-items:center; justify-content:center; padding:20px; }}
+.payment-modal.show {{ display:flex; }}
+.payment-backdrop {{ position:absolute; inset:0; width:100%; border:0; background:rgba(0,0,0,.58); cursor:pointer; }}
+.payment-card {{ position:relative; z-index:1; width:min(100%,390px); background:#fff; border-radius:20px; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,.3); }}
+.payment-card h2 {{ margin:0 34px 18px 0; font-size:22px; }}
+.payment-close {{ position:absolute; top:12px; right:12px; width:36px; height:36px; border:0; border-radius:50%; font-size:24px; cursor:pointer; }}
+.payment-choices {{ display:grid; gap:10px; }}
+.payment-choices a {{ display:block; padding:14px; border-radius:12px; background:#f2f4f6; color:#111; text-decoration:none; text-align:center; font-weight:800; }}
 .links-area {{ padding: 24px 20px 34px; }}
 .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:{safe_link_bg}; color:{safe_link_text}; border:2px solid {safe_link_border}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:{safe_link_text}; }}\n.buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
@@ -5415,8 +5499,12 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
   <div class="links-area">{spotlight_html}{links_html}{lead_capture_html}</div>
   <div class="buttn-footer">Powered by {_buttn_logo_html("black", "buttn-footer-logo")}</div>
 </div>
+{payment_modal_html}
 {spotlight_player_modal_html}
 <script>
+function openPaymentChoices() {{ const modal = document.getElementById("payment-choice-modal"); if (modal) {{ modal.classList.add("show"); modal.setAttribute("aria-hidden", "false"); }} }}
+function closePaymentChoices() {{ const modal = document.getElementById("payment-choice-modal"); if (modal) {{ modal.classList.remove("show"); modal.setAttribute("aria-hidden", "true"); }} }}
+document.addEventListener("keydown", function(event) {{ if (event.key === "Escape") closePaymentChoices(); }});
 function loadSpotlightInline(button) {{
     if (!button) return;
     const src = button.getAttribute("data-src") || "";
@@ -5627,6 +5715,7 @@ def buttn_edit_profile(username):
         profile["action_bg_color"] = _clean_hex(request.form.get("action_bg_color"), "#ffffff")
         profile["action_text_color"] = _clean_hex(request.form.get("action_text_color"), "#111111")
         profile["action_border_color"] = _clean_hex(request.form.get("action_border_color"), "#d8dde6")
+        profile["pay_button_color"] = _clean_hex(request.form.get("pay_button_color"), "#16833b")
         profile["lead_capture_enabled"] = (request.form.get("lead_capture_enabled") == "on")
         profile["lead_capture_headline"] = (request.form.get("lead_capture_headline") or "Stay Connected").strip()[:120]
         profile["lead_capture_button_text"] = (request.form.get("lead_capture_button_text") or "Submit").strip()[:60]
@@ -5671,6 +5760,18 @@ def buttn_edit_profile(username):
         if not links:
             links.append({"icon": "custom", "label": "Button Text", "url": ""})
         profile["links"] = links
+        payment_links = []
+        for service, default_label in PAYMENT_SERVICES:
+            payment_url = _safe_payment_url(request.form.get(f"payment_{service}_url"))
+            if not payment_url:
+                continue
+            service_name = ""
+            if service == "other":
+                service_name = (request.form.get("payment_other_name") or "").strip()[:80]
+                if not service_name:
+                    service_name = default_label
+            payment_links.append({"service": service, "service_name": service_name, "url": payment_url})
+        profile["payment_links"] = payment_links
         profile["buttn_url"] = requested_url
 
         if user_id:
@@ -5704,6 +5805,15 @@ def buttn_edit_profile(username):
           <button type="button" class="remove-link-btn" data-remove-link="{i}">×</button>
         </div>
         '''
+
+    saved_payments = {item.get("service"): item for item in profile.get("payment_links", [])}
+    payment_inputs = ""
+    for service, label in PAYMENT_SERVICES:
+        item = saved_payments.get(service, {})
+        name_input = ""
+        if service == "other":
+            name_input = f'<div class="field"><label>Payment service name</label><input id="payment_other_name_input" type="text" name="payment_other_name" value="{html.escape(item.get("service_name", ""))}" placeholder="Service name"></div>'
+        payment_inputs += f'''{name_input}<div class="field"><label>{html.escape(label)}</label><input id="payment_{service}_url_input" class="payment-url-input" type="url" name="payment_{service}_url" value="{html.escape(item.get("url", ""))}" placeholder="https://..." pattern="https?://.+"></div>'''
 
 
 
@@ -5808,6 +5918,12 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
           {link_inputs}
         </div>
         <button type="button" id="add_link_btn" class="add-link-btn">+ Add Link</button>
+      </div>
+      <div class="panel">
+        <h2>PAYMENTS</h2>
+        <div class="small-help" style="margin-bottom:14px;">Add only the external payment links you use. BUTTN does not process payments or collect payment credentials.</div>
+        {payment_inputs}
+        <div class="field"><label>Pay Button Color</label><input id="pay_button_color_input" type="color" name="pay_button_color" value="{val('pay_button_color', '#16833b')}"><div class="small-help">Defaults to green; Pay text automatically switches for readable contrast.</div></div>
       </div>
       <div class="panel">
         <h2>Lead Capture</h2>
@@ -6012,6 +6128,16 @@ function updateCurrentPublicUrl() {{
     urlDisplay.textContent = "https://mybuttn.com/" + (slug || {json.dumps(username)});
 }}
 
+function readableTextColor(hex) {{
+    const clean = String(hex || "").replace("#", "");
+    if (!/^[0-9a-f]{{6}}$/i.test(clean)) return "#ffffff";
+    const channels = [0, 2, 4].map(function(offset) {{
+        const value = parseInt(clean.slice(offset, offset + 2), 16) / 255;
+        return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+    }});
+    return (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) > 0.48 ? "#111111" : "#ffffff";
+}}
+
 function renderLivePreview() {{
     updateCurrentPublicUrl();
     const root = getEl("live_buttn_preview");
@@ -6032,6 +6158,7 @@ function renderLivePreview() {{
     const actionBg = getVal("action_bg_color_input", "#ffffff");
     const actionText = getVal("action_text_color_input", "#111111");
     const actionBorder = getVal("action_border_color_input", "#d8dde6");
+    const payButtonColor = getVal("pay_button_color_input", "#16833b");
     const leadCaptureEnabled = !!(getEl("lead_capture_enabled_input") && getEl("lead_capture_enabled_input").checked);
     const leadHeadline = getVal("lead_capture_headline_input", "Stay Connected");
     const leadButtonText = getVal("lead_capture_button_text_input", "Submit");
@@ -6061,6 +6188,10 @@ function renderLivePreview() {{
 
     let actions = "";
     if (phone.trim()) actions += `<a class="action-btn" href="tel:${{escapeHtml(phone)}}">Call</a>`;
+    const paymentUrls = Array.from(document.querySelectorAll(".payment-url-input"))
+        .map(function(input) {{ return String(input.value || "").trim(); }})
+        .filter(function(value) {{ try {{ const parsed = new URL(value); return parsed.protocol === "http:" || parsed.protocol === "https:"; }} catch (err) {{ return false; }} }});
+    if (paymentUrls.length) actions += `<a class="action-btn pay-action-btn" href="${{paymentUrls.length === 1 ? escapeHtml(paymentUrls[0]) : "#"}}">$&nbsp; Pay</a>`;
     if (email.trim()) actions += `<a class="action-btn" href="mailto:${{escapeHtml(email)}}">Email</a>`;
     actions += '<a class="action-btn" href="#">Contact Info</a>';
 
@@ -6099,6 +6230,7 @@ function renderLivePreview() {{
 #live_buttn_preview .profile-title {{ font-size: 15px; color:${{headerTitleColor}}; margin-top: 6px; }}
 #live_buttn_preview .actions {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 18px; }}
 #live_buttn_preview .action-btn {{ text-decoration:none; color:${{actionText}}; background:${{actionBg}}; border:1px solid ${{actionBorder}}; border-radius:999px; padding:10px 17px; font-weight:700; font-size:14px; }}
+#live_buttn_preview .pay-action-btn {{ color:${{readableTextColor(payButtonColor)}}; background:${{payButtonColor}}; border-color:${{payButtonColor}}; font-weight:900; box-shadow:0 5px 14px rgba(0,0,0,.16); }}
 #live_buttn_preview .links-area {{ padding: 24px 20px 34px; }}
 #live_buttn_preview .buttn-link {{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; text-align:center; text-decoration:none; background:${{linkBg}}; color:${{linkText}}; border:2px solid ${{linkBorder}}; border-radius:16px; padding:16px 14px; margin-bottom:13px; font-weight:800; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }}
 #live_buttn_preview .buttn-link-icon {{ width:24px; height:24px; min-width:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; line-height:1; color:${{linkText}}; }}\n#live_buttn_preview .buttn-link-icon svg {{ width:22px; height:22px; display:block; fill: currentColor; stroke: currentColor; }}
@@ -6143,12 +6275,16 @@ function renderLivePreview() {{
  "link_bg_color_input", "link_text_color_input", "link_border_color_input",
  "header_name_color_input", "header_title_color_input", "action_bg_color_input",
  "action_text_color_input", "action_border_color_input",
+ "pay_button_color_input",
  "lead_capture_headline_input", "lead_capture_button_text_input",
  "spotlight_headline_input", "spotlight_subtext_input", "spotlight_url_input",
  "spotlight_media_shape_input", "spotlight_open_behavior_input"
 ].forEach(function(id) {{
     const el = getEl(id);
     if (el) el.addEventListener("input", renderLivePreview);
+}});
+document.querySelectorAll(".payment-url-input").forEach(function(input) {{
+    input.addEventListener("input", renderLivePreview);
 }});
 const leadCaptureEnabledInput = getEl("lead_capture_enabled_input");
 if (leadCaptureEnabledInput) {{
