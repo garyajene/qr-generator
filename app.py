@@ -5467,7 +5467,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; background: {safe_page_bg}; }
 .spotlight-empty-media {{ display:flex; align-items:center; justify-content:center; min-height:220px; }}
 .spotlight-open-original-inline {{ display:block; padding:0 16px 16px; color:#111; font-size:13px; font-weight:900; text-decoration:none; }}
 .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
-.spotlight-copy {{ padding:16px; }}
+.spotlight-copy {{ padding:16px; text-align:center; }}
 .spotlight-modal {{ display:none; position:fixed; inset:0; z-index:99999; align-items:center; justify-content:center; padding:18px; }}
 .spotlight-modal.show {{ display:flex; }}
 .spotlight-modal-backdrop {{ position:absolute; inset:0; background:rgba(0,0,0,0.72); }}
