@@ -6257,7 +6257,7 @@ function renderLivePreview() {{
 #live_buttn_preview .spotlight-shape-vertical {{ aspect-ratio:9/16; }}
 #live_buttn_preview .spotlight-image-wrap img {{ width:100%; height:100%; object-fit:cover; display:block; }}
 #live_buttn_preview .spotlight-play {{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:62px; height:62px; border-radius:999px; background:rgba(0,0,0,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; padding-left:4px; box-shadow:0 8px 24px rgba(0,0,0,0.28); }}
-#live_buttn_preview .spotlight-copy {{ padding:16px; }}
+#live_buttn_preview .spotlight-copy {{ padding:16px; text-align:center; }}
 #live_buttn_preview .spotlight-kicker {{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; color:#777; margin-bottom:6px; }}
 #live_buttn_preview .spotlight-copy h2 {{ margin:0; font-size:21px; line-height:1.15; }}
 #live_buttn_preview .spotlight-subtext {{ margin-top:8px; color:#555; font-size:14px; line-height:1.4; }}
