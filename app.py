@@ -318,6 +318,7 @@ def ensure_database_ready():
 ERROR_LEVEL = "h"
 BOX = 16
 QUIET = 6
+LETTER_A_DATA_DOT_SCALE = 0.80
 
 
 def parse_hex_color(value):
@@ -843,6 +844,8 @@ def generate_branded_qr(data, art=None, bg_override=None):
     # dark; light and medium branded QR output stays byte-for-byte unchanged.
     if light_on_dark:
         dot_scale = max(0.20, min(0.95, dot_scale + 0.14))
+
+    dot_scale *= LETTER_A_DATA_DOT_SCALE
 
     def draw_dot(x0, y0, x1, y1, scale, color):
         pad = (1.0 - scale) * BOX / 2.0
