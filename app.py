@@ -5864,7 +5864,17 @@ input[type="range"] {{ width:100%; }}
 .secondary-btn {{ width:100%; padding:11px; border:1px solid #cfd5df; background:#f8fafc; color:#111; font-size:14px; font-weight:800; border-radius:12px; cursor:pointer; margin-top:8px; }}
 .save-btn {{ width:100%; padding:15px; border:none; background:#111; color:#fff; font-size:17px; font-weight:800; border-radius:14px; cursor:pointer; }}
 .preview-card {{ background:#fff; border-radius:24px; overflow:hidden; border:1px solid #dde1e7; position:sticky; top:20px; }}
-.preview-note {{ font-size:13px; color:#666; padding:15px; border-bottom:1px solid #eee; }}
+.preview-url-panel {{ padding:22px; background:#111; color:#fff; border-bottom:1px solid #2f2f2f; }}
+.preview-url-eyebrow {{ margin-bottom:8px; color:rgba(255,255,255,.68); font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }}
+.preview-url-row {{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }}
+.preview-url-value {{ min-width:0; color:#fff; font-size:clamp(23px,3vw,34px); line-height:1.15; font-weight:950; letter-spacing:-.03em; text-decoration:none; overflow-wrap:anywhere; }}
+.preview-url-value:hover {{ text-decoration:underline; text-underline-offset:4px; }}
+.preview-url-actions {{ display:flex; gap:9px; flex-wrap:wrap; flex:0 0 auto; }}
+.preview-url-action {{ display:inline-flex; align-items:center; justify-content:center; min-height:42px; padding:10px 14px; border:1px solid rgba(255,255,255,.32); border-radius:999px; background:rgba(255,255,255,.10); color:#fff; font:inherit; font-size:13px; font-weight:900; line-height:1; text-decoration:none; cursor:pointer; }}
+.preview-url-action.primary {{ background:#fff; color:#111; border-color:#fff; }}
+.preview-url-copy-status {{ min-height:18px; margin-top:8px; color:#b8f3c8; font-size:12px; font-weight:800; }}
+.preview-note {{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 18px; border-bottom:1px solid #eee; color:#333; font-size:13px; font-weight:900; }}
+.preview-note span {{ color:#777; font-weight:700; }}
 .small-help {{ color:#777; font-size:13px; margin-top:6px; }}
 .toggle-row {{ display:flex; align-items:center; gap:10px; font-weight:800; margin-bottom:14px; }}
 .toggle-row input {{ width:auto; }}
@@ -5890,7 +5900,7 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
 .editor-modal-close {{ position:absolute; top:12px; right:12px; width:36px; height:36px; border:none; border-radius:999px; background:#f1f1f1; color:#111; font-size:24px; line-height:1; cursor:pointer; }}
 .editor-modal-ok {{ width:100%; margin-top:18px; padding:13px; border:none; border-radius:12px; background:#111; color:#fff; font-size:15px; font-weight:900; cursor:pointer; }}
 {_app_nav_css()}
-@media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} }}
+@media (max-width: 860px) {{ .builder-grid {{ grid-template-columns:1fr; }} .preview-card {{ position:static; }} .link-edit-row {{ grid-template-columns:1fr; }} .remove-link-btn {{ width:100%; }} .preview-url-row {{ align-items:flex-start; }} .preview-url-actions {{ width:100%; }} .preview-url-action {{ flex:1; }} }}
 </style>
 </head>
 <body>
@@ -6020,7 +6030,18 @@ body[data-plan-preview="free"] .free-preview-note {{ display:block; }}
       <button class="save-btn" type="submit">Save & Preview</button>
     </form>
     <div class="preview-card">
-      <div class="preview-note">Live Preview (updates instantly) — Your BUTTN URL: <strong id="current_public_url">https://mybuttn.com/{html.escape(username)}</strong></div>
+      <div class="preview-url-panel">
+        <div class="preview-url-eyebrow">Your BUTTN URL</div>
+        <div class="preview-url-row">
+          <a id="current_public_url" class="preview-url-value" href="/{html.escape(username)}" target="_blank" rel="noopener">mybuttn.com/{html.escape(username)}</a>
+          <div class="preview-url-actions">
+            <button id="copy_public_url" class="preview-url-action primary" type="button">Copy URL</button>
+            <a id="open_public_url" class="preview-url-action" href="/{html.escape(username)}" target="_blank" rel="noopener">Open Page</a>
+          </div>
+        </div>
+        <div id="url_copy_status" class="preview-url-copy-status" role="status" aria-live="polite"></div>
+      </div>
+      <div class="preview-note"><strong>Live Preview</strong><span>Updates instantly</span></div>
       <div id="live_buttn_preview" style="width:100%; min-height:680px; background:#ffffff;"></div>
     </div>
   </div>
@@ -6145,9 +6166,34 @@ function normalizeButtnSlug(value) {{
 function updateCurrentPublicUrl() {{
     const urlInput = getEl("buttn_url_input");
     const urlDisplay = getEl("current_public_url");
+    const openLink = getEl("open_public_url");
     if (!urlDisplay) return;
-    const slug = normalizeButtnSlug(urlInput ? urlInput.value : {json.dumps(username)});
-    urlDisplay.textContent = "https://mybuttn.com/" + (slug || {json.dumps(username)});
+    const slug = normalizeButtnSlug(urlInput ? urlInput.value : {json.dumps(username)}) || {json.dumps(username)};
+    const fullUrl = "https://mybuttn.com/" + slug;
+    urlDisplay.textContent = "mybuttn.com/" + slug;
+    urlDisplay.href = fullUrl;
+    if (openLink) openLink.href = fullUrl;
+}}
+async function copyCurrentPublicUrl() {{
+    const urlDisplay = getEl("current_public_url");
+    const status = getEl("url_copy_status");
+    if (!urlDisplay) return;
+    const value = urlDisplay.href;
+    try {{
+        await navigator.clipboard.writeText(value);
+        if (status) status.textContent = "URL copied!";
+    }} catch (error) {{
+        const helper = document.createElement("textarea");
+        helper.value = value;
+        helper.setAttribute("readonly", "");
+        helper.style.position = "fixed";
+        helper.style.opacity = "0";
+        document.body.appendChild(helper);
+        helper.select();
+        const copied = document.execCommand("copy");
+        helper.remove();
+        if (status) status.textContent = copied ? "URL copied!" : "Copy failed. Press and hold the URL to copy it.";
+    }}
 }}
 
 function readableTextColor(hex) {{
@@ -6430,6 +6476,8 @@ if (clearSpotlightImageBtn) {{
         renderLivePreview();
     }});
 }}
+const copyPublicUrlButton = getEl("copy_public_url");
+if (copyPublicUrlButton) copyPublicUrlButton.addEventListener("click", copyCurrentPublicUrl);
 initPlanPreview();
 </script>
 </body>
