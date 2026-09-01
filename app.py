@@ -5205,9 +5205,15 @@ function copyText(value) {{
 """
 
 
-@app.route("/buttn/start/<username>", methods=["POST"])
+@app.route("/buttn/start/<username>", methods=["GET", "POST"])
 def buttn_start_from_qr(username):
     username = (username or "test").strip().lower().replace(" ", "-") or "test"
+
+    # This is a handoff endpoint, not a destination page. If a browser revisits,
+    # refreshes, bookmarks, or opens it with GET, send the customer safely to
+    # the editor instead of exposing a 405 Method Not Allowed page.
+    if request.method == "GET":
+        return redirect(f"/buttn/edit/{username}", code=303)
 
     profile = BUTTN_PROFILES.get(username)
     if profile is None:
@@ -5229,7 +5235,9 @@ def buttn_start_from_qr(username):
         profile["header_bg_color"] = rgb_to_hex(parsed_bg)
 
     BUTTN_PROFILES[username] = profile
-    return redirect(f"/buttn/edit/{username}")
+    # Explicit POST-Redirect-GET: after the setup handoff, the browser should
+    # always land on a normal editor URL that can be refreshed or reopened.
+    return redirect(f"/buttn/edit/{username}", code=303)
 
 
 @app.route("/buttn/<username>")
