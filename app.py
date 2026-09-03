@@ -3543,12 +3543,12 @@ def _set_current_user_pro():
     try:
         init_database()
         with engine.begin() as conn:
-            conn.execute(text("""
+            result = conn.execute(text("""
                 UPDATE users
                 SET account_type = 'pro'
                 WHERE id = :user_id
             """), {"user_id": user_id})
-        return True
+        return result.rowcount == 1
     except Exception:
         return False
 
@@ -3614,11 +3614,107 @@ def account_upgrade():
     return redirect(checkout_url)
 
 
+def _stripe_checkout_is_valid(checkout, user_id, session_id, live_mode):
+    """Only trust a paid, owned Checkout Session retrieved directly from Stripe."""
+    if not isinstance(checkout, dict) or not user_id:
+        return False
+    if (
+        checkout.get("id") != session_id
+        or checkout.get("livemode") is not live_mode
+        or checkout.get("mode") != "subscription"
+        or checkout.get("status") != "complete"
+        or checkout.get("payment_status") != "paid"
+        or checkout.get("client_reference_id") != str(user_id)
+    ):
+        return False
+    metadata = checkout.get("metadata")
+    if not isinstance(metadata, dict) or metadata.get("user_id") != str(user_id):
+        return False
+
+    # Verify the purchased price, not user-supplied metadata about the product.
+    line_items = checkout.get("line_items")
+    if not isinstance(line_items, dict) or line_items.get("has_more") is not False:
+        return False
+    items = line_items.get("data")
+    if not isinstance(items, list) or len(items) != 1:
+        return False
+    item = items[0]
+    if not isinstance(item, dict) or item.get("quantity") != 1:
+        return False
+    price = item.get("price")
+    if not isinstance(price, dict) or price.get("id") != STRIPE_PRO_PRICE_ID:
+        return False
+    if price.get("product") != STRIPE_PRO_PRODUCT_ID:
+        return False
+
+    # Re-read current subscription state: an old paid session must not revive
+    # a subscription that has since been canceled or become delinquent.
+    subscription = checkout.get("subscription")
+    if not isinstance(subscription, dict) or subscription.get("status") != "active":
+        return False
+    if not subscription.get("id") or subscription.get("livemode") is not live_mode:
+        return False
+    customer = checkout.get("customer")
+    if not isinstance(customer, str) or not customer.startswith("cus_"):
+        return False
+    if subscription.get("customer") != customer:
+        return False
+    subscription_items = subscription.get("items")
+    if not isinstance(subscription_items, dict) or subscription_items.get("has_more") is not False:
+        return False
+    current_items = subscription_items.get("data")
+    if not isinstance(current_items, list) or len(current_items) != 1:
+        return False
+    current_item = current_items[0]
+    if not isinstance(current_item, dict) or current_item.get("quantity") != 1:
+        return False
+    current_price = current_item.get("price")
+    return (
+        isinstance(current_price, dict)
+        and current_price.get("id") == STRIPE_PRO_PRICE_ID
+        and current_price.get("product") == STRIPE_PRO_PRODUCT_ID
+    )
+
+
+def _verify_stripe_checkout_session(user_id, session_id):
+    if not STRIPE_SECRET_KEY or not STRIPE_PRO_PRICE_ID or not STRIPE_PRO_PRODUCT_ID:
+        return False
+    live_mode = STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_"))
+    if not live_mode and not STRIPE_SECRET_KEY.startswith(("sk_test_", "rk_test_")):
+        return False
+    prefix = "cs_live_" if live_mode else "cs_test_"
+    if not isinstance(session_id, str) or not re.fullmatch(prefix + r"[A-Za-z0-9]{1,250}", session_id):
+        return False
+    query = urllib.parse.urlencode([
+        ("expand[]", "line_items"),
+        ("expand[]", "subscription"),
+    ])
+    auth = base64.b64encode((STRIPE_SECRET_KEY + ":").encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        "https://api.stripe.com/v1/checkout/sessions/" + session_id + "?" + query,
+        method="GET",
+        headers={"Authorization": "Basic " + auth},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            checkout = json.loads(resp.read().decode("utf-8"))
+        return _stripe_checkout_is_valid(checkout, user_id, session_id, live_mode)
+    except Exception:
+        # Fail closed; never display Stripe responses, secrets, or customer data.
+        app.logger.warning("Stripe checkout verification failed.")
+        return False
+
+
 @app.route("/account/billing/success")
 def account_billing_success():
-    if not _current_user_id():
+    user_id = _current_user_id()
+    if not user_id:
         return redirect("/login")
-    _set_current_user_pro()
+    session_id = request.args.get("session_id", "")
+    if not _verify_stripe_checkout_session(user_id, session_id):
+        return _dashboard_page(message="We could not confirm a paid BUTTN Pro subscription for this account. If you have paid, try refreshing this page or contact support. Do not pay again.")
+    if not _set_current_user_pro():
+        return _dashboard_page(message="Your payment was confirmed, but we could not update your account. Please try refreshing this page or contact support. Do not pay again.")
     return _dashboard_page(message="Your BUTTN Pro plan is active.")
 
 
