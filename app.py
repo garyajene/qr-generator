@@ -10,6 +10,9 @@ from PIL import Image, ImageDraw, ImageStat
 import segno
 import html
 import json
+import hashlib
+import hmac
+import time
 import os
 import urllib.parse
 import urllib.request
@@ -42,6 +45,7 @@ TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "").strip()
 STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID", "price_1Tksg0LsMfpRkC1z5MxBG7HD").strip()
 STRIPE_PRO_PRODUCT_ID = os.environ.get("STRIPE_PRO_PRODUCT_ID", "prod_UkNQPhy4O10vsf").strip()
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 
 
 
@@ -301,6 +305,8 @@ def init_database():
               AND trial_ends_at IS NOT NULL
               AND trial_ends_at <= NOW()
         """))
+
+        _init_stripe_billing_tables(conn)
 
     _db_initialized = True
 
@@ -3576,6 +3582,8 @@ def _create_stripe_checkout_session(user_id, user_email):
         "customer_email": user_email or "",
         "metadata[user_id]": str(user_id),
         "metadata[product_id]": STRIPE_PRO_PRODUCT_ID,
+        "subscription_data[metadata][user_id]": str(user_id),
+        "subscription_data[metadata][product_id]": STRIPE_PRO_PRODUCT_ID,
     }
 
     data = urllib.parse.urlencode(payload).encode("utf-8")
@@ -3705,6 +3713,279 @@ def _verify_stripe_checkout_session(user_id, session_id):
         return False
 
 
+def _init_stripe_billing_tables(conn):
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS buttn_stripe_subscriptions (
+            subscription_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            customer_id TEXT NOT NULL,
+            livemode BOOLEAN NOT NULL,
+            status TEXT NOT NULL,
+            grants_pro BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS buttn_stripe_subscriptions_user_idx
+        ON buttn_stripe_subscriptions(user_id)
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS buttn_stripe_webhook_events (
+            event_id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            processed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+
+def _stripe_live_mode():
+    if STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_")):
+        return True
+    if STRIPE_SECRET_KEY.startswith(("sk_test_", "rk_test_")):
+        return False
+    raise ValueError("Stripe is not configured")
+
+
+def _stripe_read_object(kind, object_id, expansions=()):
+    prefixes = {"checkout/sessions": "cs_", "subscriptions": "sub_"}
+    prefix = prefixes.get(kind)
+    if not prefix or not isinstance(object_id, str) or not re.fullmatch(prefix + r"[A-Za-z0-9_]{1,250}", object_id):
+        raise ValueError("Invalid Stripe object")
+    _stripe_live_mode()
+    query = urllib.parse.urlencode([("expand[]", value) for value in expansions])
+    url = "https://api.stripe.com/v1/" + kind + "/" + object_id
+    if query:
+        url += "?" + query
+    auth = base64.b64encode((STRIPE_SECRET_KEY + ":").encode()).decode("ascii")
+    req = urllib.request.Request(url, method="GET", headers={
+        "Authorization": "Basic " + auth,
+        "Stripe-Version": "2025-06-30.basil",
+    })
+    with urllib.request.urlopen(req, timeout=8) as response:
+        payload = response.read(2 * 1024 * 1024 + 1)
+    if len(payload) > 2 * 1024 * 1024:
+        raise ValueError("Oversized Stripe response")
+    result = json.loads(payload)
+    if not isinstance(result, dict) or result.get("id") != object_id:
+        raise ValueError("Unexpected Stripe response")
+    if result.get("livemode") is not _stripe_live_mode():
+        raise ValueError("Wrong Stripe mode")
+    return result
+
+
+def _stripe_object_id(value):
+    return value.get("id") if isinstance(value, dict) else value
+
+
+def _stripe_pro_items(items):
+    if not isinstance(items, dict) or items.get("has_more") is not False:
+        return False
+    data = items.get("data")
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+        return False
+    price = data[0].get("price")
+    return (
+        data[0].get("quantity") == 1
+        and isinstance(price, dict)
+        and price.get("id") == STRIPE_PRO_PRICE_ID
+        and price.get("product") == STRIPE_PRO_PRODUCT_ID
+    )
+
+
+def _stripe_owner_id(value):
+    if not re.fullmatch(r"[1-9][0-9]{0,9}", str(value)):
+        raise ValueError("Missing Stripe account mapping")
+    return int(value)
+
+
+def _lock_stripe_billing(conn):
+    # Serialize account changes with return-page processing. A busy worker
+    # returns a retryable error rather than waiting past Stripe's timeout.
+    if not conn.execute(text("SELECT pg_try_advisory_xact_lock(762410319)")).first()[0]:
+        raise RuntimeError("Billing synchronization busy")
+
+
+def _sync_stripe_subscription(conn, subscription_id, expected_user=None):
+    subscription = _stripe_read_object("subscriptions", subscription_id, ("latest_invoice",))
+    stored = conn.execute(text("""
+        SELECT user_id, customer_id, livemode FROM buttn_stripe_subscriptions
+        WHERE subscription_id = :subscription_id
+    """), {"subscription_id": subscription_id}).first()
+    pro_plan = _stripe_pro_items(subscription.get("items"))
+    metadata = subscription.get("metadata") or {}
+    # Do not touch subscriptions for other products in this Stripe account.
+    if not stored and not pro_plan:
+        return "ignored"
+    owner = metadata.get("user_id")
+    if stored:
+        user_id = stored[0]
+        if owner is not None and _stripe_owner_id(owner) != user_id:
+            raise ValueError("Conflicting Stripe account mapping")
+        if bool(stored[2]) != _stripe_live_mode():
+            raise ValueError("Conflicting Stripe mode")
+    else:
+        # Older checkouts only have session metadata; signed checkout events
+        # and the authenticated return page supply an independently checked ID.
+        user_id = _stripe_owner_id(owner if owner is not None else expected_user)
+    if expected_user is not None and user_id != expected_user:
+        raise ValueError("Stripe account mismatch")
+    customer_id = _stripe_object_id(subscription.get("customer"))
+    if not isinstance(customer_id, str) or not customer_id.startswith("cus_"):
+        raise ValueError("Missing Stripe customer")
+    if stored and stored[1] != customer_id:
+        raise ValueError("Stripe customer mismatch")
+    user = conn.execute(text("SELECT id, account_type FROM users WHERE id = :id"), {"id": user_id}).first()
+    if not user:
+        raise ValueError("Unknown BUTTN account")
+    invoice = subscription.get("latest_invoice")
+    grants_pro = (
+        pro_plan and subscription.get("status") == "active"
+        and not subscription.get("pause_collection")
+        and isinstance(invoice, dict) and invoice.get("status") == "paid"
+    )
+    conn.execute(text("""
+        INSERT INTO buttn_stripe_subscriptions
+            (subscription_id, user_id, customer_id, livemode, status, grants_pro)
+        VALUES (:subscription_id, :user_id, :customer_id, :livemode, :status, :grants_pro)
+        ON CONFLICT (subscription_id) DO UPDATE SET
+            status = excluded.status, grants_pro = excluded.grants_pro,
+            updated_at = CURRENT_TIMESTAMP
+    """), {
+        "subscription_id": subscription_id, "user_id": user_id,
+        "customer_id": customer_id, "livemode": _stripe_live_mode(),
+        "status": subscription.get("status") or "unknown", "grants_pro": grants_pro,
+    })
+    # Ending one subscription must not revoke another paid subscription.
+    has_paid_plan = conn.execute(text("""
+        SELECT subscription_id FROM buttn_stripe_subscriptions
+        WHERE user_id = :user_id AND grants_pro = TRUE AND livemode = :livemode
+        LIMIT 1
+    """), {"user_id": user_id, "livemode": _stripe_live_mode()}).first() is not None
+    # An unsuccessful first checkout must not terminate the existing free trial.
+    account_type = "pro" if has_paid_plan else ("free" if user[1] == "pro" else user[1])
+    conn.execute(text("""
+        UPDATE users SET account_type = :account_type WHERE id = :user_id
+    """), {"account_type": account_type, "user_id": user_id})
+    return account_type
+
+
+def _stripe_checkout_owner(checkout):
+    if checkout.get("mode") != "subscription" or not _stripe_pro_items(checkout.get("line_items")):
+        return None
+    owner = _stripe_owner_id((checkout.get("metadata") or {}).get("user_id"))
+    if checkout.get("client_reference_id") != str(owner):
+        raise ValueError("Conflicting checkout owner")
+    return owner
+
+
+def _process_stripe_billing_event(event):
+    event_type = event["type"]
+    supported = {
+        "checkout.session.completed", "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
+        "customer.subscription.created", "customer.subscription.updated",
+        "customer.subscription.deleted", "customer.subscription.paused",
+        "customer.subscription.resumed", "invoice.paid", "invoice.payment_failed",
+    }
+    if event_type not in supported or event.get("account"):
+        return "ignored"
+    if engine is None:
+        raise RuntimeError("Billing database unavailable")
+    obj = event["data"]["object"]
+    init_database()
+    with engine.begin() as conn:
+        _lock_stripe_billing(conn)
+        if conn.execute(text("""
+            SELECT event_id FROM buttn_stripe_webhook_events WHERE event_id = :id
+        """), {"id": event["id"]}).first():
+            return "duplicate"
+        expected_user = None
+        if event_type.startswith("checkout.session."):
+            checkout = _stripe_read_object("checkout/sessions", obj["id"], ("line_items",))
+            expected_user = _stripe_checkout_owner(checkout)
+            subscription_id = _stripe_object_id(checkout.get("subscription")) if expected_user else None
+        elif event_type.startswith("customer.subscription."):
+            subscription_id = obj["id"]
+        else:
+            # Supports both legacy and Basil+ invoice event schemas.
+            subscription_id = _stripe_object_id(obj.get("subscription"))
+            parent = obj.get("parent") or {}
+            if not subscription_id and parent.get("type") == "subscription_details":
+                subscription_id = _stripe_object_id((parent.get("subscription_details") or {}).get("subscription"))
+        result = _sync_stripe_subscription(conn, subscription_id, expected_user) if subscription_id else "ignored"
+        # Record only after account updates succeed, in the same transaction.
+        conn.execute(text("""
+            INSERT INTO buttn_stripe_webhook_events (event_id, event_type)
+            VALUES (:id, :type)
+        """), {"id": event["id"], "type": event_type})
+        return result
+
+
+def _valid_stripe_webhook_signature(raw, header, now=None):
+    if not STRIPE_WEBHOOK_SECRET or not isinstance(header, str) or len(header) > 8192:
+        return False
+    try:
+        fields = [part.strip().split("=", 1) for part in header.split(",")]
+        timestamps = [value for key, value in fields if key == "t"]
+        signatures = [value for key, value in fields if key == "v1"]
+        if len(timestamps) != 1 or not re.fullmatch(r"[0-9]+", timestamps[0]):
+            return False
+        timestamp = timestamps[0]
+        if abs((time.time() if now is None else now) - int(timestamp)) > 300:
+            return False
+        digest = hmac.new(STRIPE_WEBHOOK_SECRET.encode(), timestamp.encode() + b"." + raw, hashlib.sha256).hexdigest()
+        return any(hmac.compare_digest(digest, value) for value in signatures)
+    except (ValueError, TypeError):
+        return False
+
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    if not STRIPE_WEBHOOK_SECRET or not STRIPE_SECRET_KEY:
+        return Response("Billing webhook not configured", status=503)
+    raw = request.get_data(cache=False)
+    if len(raw) > 1024 * 1024:
+        return Response("Payload too large", status=413)
+    if not _valid_stripe_webhook_signature(raw, request.headers.get("Stripe-Signature", "")):
+        return Response("Invalid signature", status=400)
+    try:
+        event = json.loads(raw)
+        if (
+            not isinstance(event, dict)
+            or not re.fullmatch(r"evt_[A-Za-z0-9_]{1,250}", str(event.get("id", "")))
+            or not isinstance(event.get("type"), str)
+            or not isinstance(event.get("data"), dict)
+            or not isinstance(event["data"].get("object"), dict)
+        ):
+            return Response("Invalid event", status=400)
+        if event.get("livemode") is not _stripe_live_mode():
+            return Response("Wrong Stripe mode", status=400)
+        _process_stripe_billing_event(event)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return Response("Invalid event", status=400)
+    except Exception:
+        app.logger.warning("Stripe billing event could not be processed; retry required.")
+        return Response("Retry required", status=503)
+    return Response("OK", status=200)
+
+
+def _activate_verified_checkout(user_id, session_id):
+    """Share the webhook's account lock and current-state checks on return."""
+    if engine is None:
+        return False
+    try:
+        init_database()
+        with engine.begin() as conn:
+            _lock_stripe_billing(conn)
+            checkout = _stripe_read_object("checkout/sessions", session_id, ("line_items", "subscription"))
+            if not _stripe_checkout_is_valid(checkout, user_id, session_id, _stripe_live_mode()):
+                return False
+            return _sync_stripe_subscription(conn, checkout["subscription"]["id"], user_id) == "pro"
+    except Exception:
+        app.logger.warning("Stripe checkout activation could not be completed.")
+        return False
+
+
 @app.route("/account/billing/success")
 def account_billing_success():
     user_id = _current_user_id()
@@ -3713,7 +3994,7 @@ def account_billing_success():
     session_id = request.args.get("session_id", "")
     if not _verify_stripe_checkout_session(user_id, session_id):
         return _dashboard_page(message="We could not confirm a paid BUTTN Pro subscription for this account. If you have paid, try refreshing this page or contact support. Do not pay again.")
-    if not _set_current_user_pro():
+    if not _activate_verified_checkout(user_id, session_id):
         return _dashboard_page(message="Your payment was confirmed, but we could not update your account. Please try refreshing this page or contact support. Do not pay again.")
     return _dashboard_page(message="Your BUTTN Pro plan is active.")
 
