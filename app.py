@@ -2793,66 +2793,51 @@ h1 {{
     box-shadow: 0 18px 50px rgba(0,0,0,0.20);
     border: 8px solid #fff;
 }}
-.sections {{
-    background: #fff;
-    border-top: 1px solid rgba(0,0,0,0.08);
-}}
-.section-inner {{
-    max-width: 1180px;
-    margin: 0 auto;
-    padding: 66px 24px;
-}}
-.section-title {{
-    margin: 0 0 14px;
-    font-size: clamp(32px, 4vw, 52px);
-    line-height: 1;
-    letter-spacing: -0.05em;
-}}
-.section-copy {{
-    margin: 0;
-    max-width: 720px;
-    color: #555;
-    font-size: 18px;
-    line-height: 1.45;
-}}
-.card-grid {{
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0,1fr));
-    gap: 16px;
-    margin-top: 30px;
-}}
-.info-card {{
-    background: #f6f4ef;
-    border: 1px solid rgba(0,0,0,0.08);
-    border-radius: 22px;
-    padding: 24px;
-}}
-.info-card h3 {{
-    margin: 0 0 9px;
-    font-size: 22px;
-}}
-.info-card p {{
-    margin: 0;
-    color: #555;
-    line-height: 1.45;
-}}
-.final-cta {{
-    background: #111;
-    color: #fff;
-    text-align: center;
-}}
-.final-cta .section-inner {{
-    padding-top: 70px;
-    padding-bottom: 76px;
-}}
-.final-cta p {{
-    color: rgba(255,255,255,0.72);
-    margin-left: auto;
-    margin-right: auto;
-}}
-.final-cta .btn-secondary {{
-    border-color: #fff;
-}}
+.landing-section {{ overflow: hidden; }}
+.section-inner {{ max-width: 1180px; margin: 0 auto; padding: 108px 24px; }}
+.eyebrow {{ margin: 0 0 18px; font-size: 13px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }}
+.section-title {{ margin: 0; font-size: clamp(42px, 6vw, 76px); line-height: .96; letter-spacing: -.065em; }}
+.section-copy {{ margin: 22px 0 0; max-width: 680px; color: #555; font-size: 19px; line-height: 1.55; }}
+.section-heading {{ max-width: 820px; }}
+.how-section {{ background: #111; color: #fff; }}
+.how-section .section-copy, .hub-section .section-copy {{ color: rgba(255,255,255,.7); }}
+.how-layout, .hub-layout {{ display: grid; grid-template-columns: minmax(0,.9fr) minmax(400px,1.1fr); gap: 72px; align-items: center; }}
+.section-image {{ display: block; width: 100%; height: auto; border-radius: 32px; }}
+.how-steps {{ display: grid; gap: 4px; margin-top: 42px; }}
+.how-step {{ display: grid; grid-template-columns: 52px 1fr; gap: 16px; align-items: center; padding: 20px 0; border-top: 1px solid rgba(255,255,255,.18); }}
+.how-step:last-child {{ border-bottom: 1px solid rgba(255,255,255,.18); }}
+.step-number {{ display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #fff; color: #111; font-weight: 900; }}
+.how-step h3 {{ margin: 0 0 4px; font-size: 23px; }}
+.how-step p {{ margin: 0; color: rgba(255,255,255,.62); line-height: 1.4; }}
+.hub-section {{ background: #1b1b1b; color: #fff; }}
+.hub-layout {{ grid-template-columns: minmax(400px,1.08fr) minmax(0,.92fr); }}
+.hub-image-wrap {{ background: #fff; border-radius: 36px; padding: 12px; }}
+.hub-section .cta-row {{ margin-top: 34px; }}
+.hub-section .btn {{ border-color: #fff; background: #fff; color: #111; }}
+.styles-section {{ background: #f6f4ef; }}
+.styles-header {{ display: flex; justify-content: space-between; gap: 30px; align-items: end; }}
+.product-grid {{ display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin-top: 54px; }}
+.product-card {{ display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: 28px; background: #fff; border: 1px solid rgba(0,0,0,.08); }}
+.product-image-wrap {{ aspect-ratio: 1 / .92; display: grid; place-items: center; overflow: hidden; background: #fff; }}
+.product-image-wrap img {{ width: 100%; height: 100%; object-fit: contain; }}
+.product-card-content {{ display: flex; flex: 1; flex-direction: column; padding: 28px; border-top: 1px solid rgba(0,0,0,.08); }}
+.product-card h3 {{ margin: 0; font-size: 28px; letter-spacing: -.04em; }}
+.product-card p {{ margin: 12px 0 24px; color: #666; line-height: 1.5; }}
+.card-link {{ margin-top: auto; align-self: flex-start; text-decoration: none; font-weight: 900; border-bottom: 2px solid #111; padding-bottom: 4px; }}
+.features-section {{ background: #fff; }}
+.features-layout {{ display: grid; grid-template-columns: minmax(340px,.9fr) minmax(0,1.1fr); gap: 74px; align-items: start; }}
+.feature-image {{ margin-top: 42px; }}
+.feature-grid {{ display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }}
+.feature-card {{ min-height: 190px; padding: 28px; border-radius: 24px; background: #f1efe9; }}
+.feature-icon {{ display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 30px; border-radius: 50%; background: #111; color: #fff; font-weight: 900; }}
+.feature-card h3 {{ margin: 0 0 8px; font-size: 21px; }}
+.feature-card p {{ margin: 0; color: #666; line-height: 1.45; }}
+.final-cta {{ background: #111; color: #fff; text-align: center; }}
+.final-cta .section-inner {{ padding-top: 112px; padding-bottom: 118px; }}
+.final-cta .section-heading {{ margin: 0 auto; }}
+.final-cta .section-copy {{ margin-left: auto; margin-right: auto; color: rgba(255,255,255,.7); }}
+.final-cta .cta-row {{ justify-content: center; }}
+.final-cta .btn {{ border-color: #fff; background: #fff; color: #111; }}
 @media (max-width: 860px) {{
     .top-nav {{
         align-items: flex-start;
@@ -2872,9 +2857,27 @@ h1 {{
     .dome-card {{
         right: 12px;
     }}
-    .card-grid {{
-        grid-template-columns: 1fr;
-    }}
+}}
+@media (max-width: 900px) {{
+    .section-inner {{ padding: 82px 24px; }}
+    .how-layout, .hub-layout, .features-layout {{ grid-template-columns: 1fr; gap: 48px; }}
+    .hub-image-wrap {{ order: 2; }}
+    .product-grid {{ grid-template-columns: 1fr; }}
+    .product-card {{ display: grid; grid-template-columns: minmax(230px,.8fr) 1fr; }}
+    .product-card-content {{ border-top: 0; border-left: 1px solid rgba(0,0,0,.08); }}
+}}
+@media (max-width: 600px) {{
+    .section-inner {{ padding: 68px 18px; }}
+    .section-title {{ font-size: clamp(38px,13vw,58px); }}
+    .section-copy {{ font-size: 17px; }}
+    .section-image, .hub-image-wrap {{ border-radius: 22px; }}
+    .styles-header {{ display: block; }}
+    .product-grid {{ margin-top: 36px; }}
+    .product-card {{ display: flex; }}
+    .product-card-content {{ border-left: 0; border-top: 1px solid rgba(0,0,0,.08); padding: 24px; }}
+    .feature-grid {{ grid-template-columns: 1fr; }}
+    .feature-card {{ min-height: 0; }}
+    .final-cta .section-inner {{ padding-top: 82px; padding-bottom: 88px; }}
 }}
 </style>
 </head>
@@ -2929,34 +2932,84 @@ h1 {{
         </section>
     </main>
 
-    <section class="sections">
+    <section class="landing-section how-section">
+        <div class="section-inner how-layout">
+            <div>
+                <p class="eyebrow">One Tap. One Scan. Endless Possibilities.</p>
+                <h2 class="section-title">How It Works</h2>
+                <div class="how-steps">
+                    <div class="how-step"><span class="step-number">1</span><div><h3>Get BUTTN</h3><p>Choose the smart product that fits how you connect.</p></div></div>
+                    <div class="how-step"><span class="step-number">2</span><div><h3>Tap or Scan</h3><p>Share your BUTTN with one quick NFC tap or QR scan.</p></div></div>
+                    <div class="how-step"><span class="step-number">3</span><div><h3>Connect Instantly</h3><p>Your audience lands directly on your digital profile.</p></div></div>
+                </div>
+            </div>
+            <img class="section-image" src="/static/landing/buttn_digital_business_card_nfc_writstband.png" alt="A customer tapping a BUTTN wristband and scanning a BUTTN business card">
+        </div>
+    </section>
+
+    <section class="landing-section hub-section">
+        <div class="section-inner hub-layout">
+            <div class="hub-image-wrap"><img class="section-image" src="/static/landing/Buttn_Digital_Busines_card.jpg" alt="BUTTN products connecting people to a mobile digital profile"></div>
+            <div class="section-heading">
+                <p class="eyebrow">Your world, one link away</p>
+                <h2 class="section-title">Your Digital Hub</h2>
+                <p class="section-copy">Bring your links, contact details, social profiles, payment links, content, and more together in one polished destination. Update it anytime and keep every connection current.</p>
+                <div class="cta-row">{primary_cta}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="landing-section styles-section">
         <div class="section-inner">
-            <h2 class="section-title">One page for every scan.</h2>
-            <p class="section-copy">Your customer taps the BUTTN or scans the QR code. They land on your branded page. From there they can shop, follow, book, watch, call, email, or leave their contact info.</p>
-            <div class="card-grid">
-                <div class="info-card">
-                    <h3>For brands</h3>
-                    <p>Send people to your store, latest drop, social pages, videos, and offers from one clean profile.</p>
-                </div>
-                <div class="info-card">
-                    <h3>For creators</h3>
-                    <p>Put your content, links, bookings, and lead capture in one place without handing out paper cards.</p>
-                </div>
-                <div class="info-card">
-                    <h3>For vendors</h3>
-                    <p>Use it at pop-ups, trade shows, vending events, packaging, business cards, and product displays.</p>
-                </div>
+            <div class="styles-header">
+                <div class="section-heading"><p class="eyebrow">Made to connect your way</p><h2 class="section-title">Choose Your BUTTN Style</h2></div>
+                <p class="section-copy">From a familiar scan to a seamless tap, pick the format that works wherever your brand shows up.</p>
+            </div>
+            <div class="product-grid">
+                <article class="product-card">
+                    <div class="product-image-wrap"><img src="/static/landing/buttn%20digital%20business%20card%20set.jpg" alt="Classic BUTTN QR card with a mobile profile and wristband"></div>
+                    <div class="product-card-content"><h3>Classic QR</h3><p>A scannable, shareable connection for cards, counters, displays, packaging, and more.</p><a class="card-link" href="/generate">Create your QR →</a></div>
+                </article>
+                <article class="product-card">
+                    <div class="product-image-wrap"><img src="/static/landing/b_buttn-dome.png" alt="Glossy black BUTTN Dome with an integrated QR code"></div>
+                    <div class="product-card-content"><h3>BUTTN Dome</h3><p>A premium NFC-enabled dome that makes connecting as simple as a tap.</p><a class="card-link" href="/register">Get your BUTTN →</a></div>
+                </article>
+                <article class="product-card">
+                    <div class="product-image-wrap"><img src="/static/landing/CUSTOM_BRANDED_QR_CODE_buttn.webp" alt="Custom branded QR products including a card, wristband, and dome"></div>
+                    <div class="product-card-content"><h3>Custom QR</h3><p>Put your logo and colors at the center of a QR experience made for your brand.</p><a class="card-link" href="/generate">Design your QR →</a></div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="landing-section features-section">
+        <div class="section-inner features-layout">
+            <div class="section-heading">
+                <p class="eyebrow">Simple by design</p>
+                <h2 class="section-title">Everything You Need. Nothing You Don't.</h2>
+                <p class="section-copy">A focused toolkit for sharing who you are and giving people a clear next step.</p>
+                <img class="section-image feature-image" src="/static/landing/Buttn_Digital_Business_Card_and_link_in_bio_c8b50861-5d68-4506-a85e-931ec70908a8.jpg" alt="A BUTTN mobile profile connecting with an NFC wristband">
+            </div>
+            <div class="feature-grid">
+                <article class="feature-card"><span class="feature-icon">1</span><h3>One profile</h3><p>Keep every important detail together in one branded destination.</p></article>
+                <article class="feature-card"><span class="feature-icon">↗</span><h3>Multiple ways to connect</h3><p>Meet people with an NFC tap, a QR scan, or your personal URL.</p></article>
+                <article class="feature-card"><span class="feature-icon">✓</span><h3>No app required</h3><p>Anyone can connect instantly using the phone already in their hand.</p></article>
+                <article class="feature-card"><span class="feature-icon">✎</span><h3>Editable anytime</h3><p>Change your destination without reprinting or replacing your BUTTN.</p></article>
+                <article class="feature-card"><span class="feature-icon">▯</span><h3>Mobile friendly</h3><p>Your information is clean, quick, and easy to use on the go.</p></article>
+                <article class="feature-card"><span class="feature-icon">B</span><h3>Professional presentation</h3><p>Make a polished first impression at every meeting and interaction.</p></article>
             </div>
         </div>
     </section>
 
     <section class="final-cta">
         <div class="section-inner">
-            <h2 class="section-title">Build your BUTTN profile first.</h2>
-            <p class="section-copy">Then connect the QR code, NFC button, card, sticker, and product experience around it.</p>
-            <div class="cta-row" style="justify-content:center;">
+            <div class="section-heading">
+            <p class="eyebrow">Ready when you are</p>
+            <h2 class="section-title">Make Every Connection Count.</h2>
+            <p class="section-copy">Create your BUTTN and turn every tap, scan, and introduction into an opportunity.</p>
+            </div>
+            <div class="cta-row">
                 {primary_cta}
-                <a class="btn btn-secondary" href="/generate">Try QR Generator</a>
             </div>
         </div>
     </section>
