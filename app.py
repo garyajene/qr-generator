@@ -2623,6 +2623,9 @@ a {{ color: inherit; }}
     max-width: 1180px;
     margin: 0 auto;
     padding: 42px 24px 70px;
+    background: #fff;
+    box-shadow: 0 0 0 100vmax #fff;
+    clip-path: inset(0 -100vmax);
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
     gap: 46px;
@@ -2693,105 +2696,15 @@ h1 {{
     padding: 8px 11px;
 }}
 .product-stage {{
-    position: relative;
-    min-height: 520px;
-}}
-.phone-card {{
-    position: relative;
-    max-width: 360px;
-    margin: 0 auto;
-    background: #111;
-    color: #fff;
-    border-radius: 34px;
-    padding: 18px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.22);
-}}
-.phone-screen {{
-    background: #f5f5f5;
-    border-radius: 24px;
-    overflow: hidden;
-    color: #111;
-}}
-.profile-top {{
-    min-height: 230px;
-    background: linear-gradient(135deg, #111, #8d5b4c);
-    padding: 38px 22px 24px;
-    text-align: center;
-    color: #fff;
-}}
-.avatar {{
-    width: 104px;
-    height: 104px;
-    margin: 0 auto 14px;
-    border-radius: 999px;
-    background: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 4px solid rgba(255,255,255,0.75);
-}}
-.avatar img {{
-    max-width: 78px;
-    width: 78px;
-    height: auto;
-}}
-.profile-name {{
-    font-size: 23px;
-    font-weight: 900;
-}}
-.profile-sub {{
-    margin-top: 5px;
-    font-size: 14px;
-    opacity: 0.78;
-}}
-.link-stack {{
-    padding: 22px 18px 24px;
-}}
-.fake-link {{
-    background: #fff;
-    border: 2px solid #e1e4ea;
-    border-radius: 15px;
-    padding: 14px;
-    margin-bottom: 12px;
-    text-align: center;
-    font-weight: 900;
-}}
-.qr-card {{
-    position: absolute;
-    left: 0;
-    bottom: 16px;
-    width: 170px;
-    background: #fff;
-    border: 1px solid rgba(0,0,0,0.1);
-    border-radius: 22px;
-    padding: 16px;
-    box-shadow: 0 18px 48px rgba(0,0,0,0.18);
-    transform: rotate(-5deg);
-}}
-.qr-grid {{
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 5px;
+    place-items: center;
 }}
-.qr-grid i {{
-    aspect-ratio: 1;
-    border-radius: 3px;
-    background: #111;
-}}
-.qr-grid i:nth-child(3n) {{
-    background: transparent;
-}}
-.dome-card {{
-    position: absolute;
-    right: 4px;
-    top: 26px;
-    width: 146px;
-    height: 146px;
-    border-radius: 999px;
-    background: radial-gradient(circle at 32% 25%, #fff, #111 38%, #000 72%);
-    box-shadow: 0 18px 50px rgba(0,0,0,0.20);
-    border: 8px solid #fff;
+.hero-product-image {{
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 520px;
+    object-fit: contain;
 }}
 .landing-section {{ overflow: hidden; }}
 .section-inner {{ max-width: 1180px; margin: 0 auto; padding: 108px 24px; }}
@@ -2847,16 +2760,6 @@ h1 {{
         grid-template-columns: 1fr;
         padding-top: 24px;
     }}
-    .product-stage {{
-        min-height: 470px;
-    }}
-    .qr-card {{
-        left: 8px;
-        bottom: 0;
-    }}
-    .dome-card {{
-        right: 12px;
-    }}
 }}
 @media (max-width: 900px) {{
     .section-inner {{ padding: 82px 24px; }}
@@ -2909,26 +2812,7 @@ h1 {{
         </section>
 
         <section class="product-stage" aria-label="BUTTN product preview">
-            <div class="dome-card"></div>
-            <div class="phone-card">
-                <div class="phone-screen">
-                    <div class="profile-top">
-                        <div class="avatar">{_buttn_logo_html("black", "buttn-avatar-logo")}</div>
-                        <div class="profile-name">Your Brand</div>
-                        <div class="profile-sub">mybuttn.com/yourbrand</div>
-                    </div>
-                    <div class="link-stack">
-                        <div class="fake-link">Shop New Drop</div>
-                        <div class="fake-link">Watch Video</div>
-                        <div class="fake-link">Book A Call</div>
-                    </div>
-                </div>
-            </div>
-            <div class="qr-card" aria-hidden="true">
-                <div class="qr-grid">
-                    {''.join('<i></i>' for _ in range(49))}
-                </div>
-            </div>
+            <img class="hero-product-image" src="/static/landing/buttn_digital_business_card_hero_2.webp" alt="BUTTN digital business card">
         </section>
     </main>
 
