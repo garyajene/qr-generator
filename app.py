@@ -3294,6 +3294,18 @@ if (deleteAccountModal) {{
 """
 
 
+# Store only a digest so complimentary recipients are not listed in public source.
+_COMPLIMENTARY_PRO_EMAIL_HASHES = frozenset({
+    "776da89a704bc8a86cb2ec9067fe7d50229eff60f2b4a43b9e9ba7293f073ee3",
+})
+
+
+def _registration_account_type(email):
+    normalized = (email or "").strip().lower()
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return "pro" if digest in _COMPLIMENTARY_PRO_EMAIL_HASHES else "trial"
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if engine is None:
@@ -3314,9 +3326,12 @@ def register():
             with engine.begin() as conn:
                 user = conn.execute(text("""
                     INSERT INTO users (email, password_hash, account_type, trial_started_at, trial_ends_at)
-                    VALUES (:email, :password_hash, 'trial', NOW(), NOW() + INTERVAL '30 days')
+                    VALUES (:email, :password_hash, :account_type,
+                            CASE WHEN :account_type = 'trial' THEN NOW() ELSE NULL END,
+                            CASE WHEN :account_type = 'trial' THEN NOW() + INTERVAL '30 days' ELSE NULL END)
                     RETURNING id, email
-                """), {"email": email, "password_hash": password_hash}).mappings().one()
+                """), {"email": email, "password_hash": password_hash,
+                      "account_type": _registration_account_type(email)}).mappings().one()
             session["user_id"] = user["id"]
             session["user_email"] = user["email"]
             return redirect("/account")
