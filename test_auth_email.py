@@ -172,6 +172,11 @@ def test_csrf_password_validation_and_security_headers(auth):
     post(client, "/forgot-password", email="legacy@example.com")
     url = link(ses)
     response = client.get(url)
+    assert b'Show Password' in response.data
+    assert b'id="show_password_toggle" type="checkbox"' in response.data
+    assert b'aria-controls="new_password confirm_password"' in response.data
+    assert b'id="new_password" type="password"' in response.data
+    assert b'id="confirm_password" type="password"' in response.data
     assert response.headers["Cache-Control"] == "no-store"
     assert response.headers["Referrer-Policy"] == "no-referrer"
     assert client.post(url, data={"password": "new-password"}).status_code == 400

@@ -3052,6 +3052,7 @@ def _auth_page(title, message="", form_html=None):
     if form_html is None:
         form_html = f'<label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label>{turnstile_widget}<button type="submit">{safe_title}</button>'
     csrf_field = auth_email.csrf_field()
+    logo_html = _buttn_logo_html("black", class_name="auth-brand-logo")
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3060,6 +3061,7 @@ def _auth_page(title, message="", form_html=None):
 <style>
 body {{ margin:0; font-family:Arial,sans-serif; background:#f3f5f7; color:#111; }}
 .auth-wrap {{ max-width:430px; margin:60px auto; background:#fff; border:1px solid #dde1e7; border-radius:18px; padding:26px; box-shadow:0 8px 24px rgba(0,0,0,0.05); }}
+.auth-brand-logo {{ display:block; width:142px; max-width:100%; height:auto; margin:0 0 22px; }}
 h1 {{ margin:0 0 8px; font-size:28px; }} p {{ color:#666; line-height:1.45; }}
 .message {{ background:#fff2f2; color:#8a1f1f; border:1px solid #f0caca; padding:12px; border-radius:10px; margin:14px 0; }}
 label {{ display:block; font-weight:700; margin:14px 0 7px; }}
@@ -3071,16 +3073,18 @@ button {{ width:100%; margin-top:18px; padding:14px; border:none; border-radius:
 .nav {{ margin-top:18px; text-align:center; font-size:14px; line-height:1.7; }} a {{ color:#111; font-weight:800; }}
 @media (max-width:520px) {{ .auth-wrap {{ margin:24px 12px; padding:22px; }} }}
 </style></head><body>
-<div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}{turnstile_missing}
+<div class="auth-wrap">{logo_html}<h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}{turnstile_missing}
 <form method="post">{csrf_field}{form_html}</form>
 <div class="nav"><a href="/forgot-password">Forgot Password?</a> &nbsp; | &nbsp; <a href="/resend-verification">Resend verification email</a></div>
 <div class="nav"><a href="/register">Create Account</a> &nbsp; | &nbsp; <a href="/login">Log In</a> &nbsp; | &nbsp; <a href="/account">My Account</a></div>
 <script>
 const showPasswordToggle = document.getElementById("show_password_toggle");
-const passwordField = document.getElementById("password_field");
-if (showPasswordToggle && passwordField) {{
+const passwordFields = document.querySelectorAll("#password_field, #new_password, #confirm_password");
+if (showPasswordToggle && passwordFields.length) {{
     showPasswordToggle.addEventListener("change", function() {{
-        passwordField.type = this.checked ? "text" : "password";
+        passwordFields.forEach(field => {{
+            field.type = this.checked ? "text" : "password";
+        }});
     }});
 }}
 </script>

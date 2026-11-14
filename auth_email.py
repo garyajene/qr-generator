@@ -81,7 +81,7 @@ def send_email(email, purpose, token):
     body = f'''<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;background:#f3f5f7;font-family:Arial,sans-serif;color:#111;padding:20px">
 <div style="max-width:520px;margin:auto;background:white;padding:28px;border-radius:18px">
-<p style="font-size:28px;font-weight:bold">BUTTN</p><h1 style="font-size:24px">{title}</h1>
+<img src="{PUBLIC_ORIGIN}/static/buttn_logo_blk.png" alt="BUTTN" width="142" height="45" style="display:block;width:142px;max-width:100%;height:auto;margin-bottom:24px;border:0"><h1 style="font-size:24px">{title}</h1>
 <p style="line-height:1.6">{intro}</p><p style="margin:30px 0"><a href="{link}" style="display:inline-block;background:#111;color:white;padding:16px 24px;border-radius:12px;text-decoration:none;font-weight:bold">{title}</a></p>
 <p style="line-height:1.6">This single-use link expires in {expiry}. If you didn’t request this, you can ignore this email.</p>
 <p style="font-size:13px;color:#666">Button not working? Copy this link:</p><p style="word-break:break-all;font-size:13px"><a href="{link}">{link}</a></p>
@@ -204,7 +204,7 @@ def install(app, get_engine, init_database, page):
     @app.route("/reset-password", methods=["GET", "POST"])
     def reset_password():
         token = request.args.get("token", "")
-        fields = '<p>Use at least 8 characters.</p><label for="new_password">New password</label><input id="new_password" type="password" name="password" minlength="8" maxlength="1024" required autocomplete="new-password"><label for="confirm_password">Confirm password</label><input id="confirm_password" type="password" name="confirm_password" minlength="8" maxlength="1024" required autocomplete="new-password"><button type="submit">Reset password</button>'
+        fields = '<p>Use at least 8 characters.</p><label for="new_password">New password</label><input id="new_password" type="password" name="password" minlength="8" maxlength="1024" required autocomplete="new-password"><label for="confirm_password">Confirm password</label><input id="confirm_password" type="password" name="confirm_password" minlength="8" maxlength="1024" required autocomplete="new-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox" aria-controls="new_password confirm_password"> Show Password</label><button type="submit">Reset password</button>'
         try:
             init_database()
             with get_engine().connect() as conn:
