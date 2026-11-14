@@ -6,3 +6,4 @@ gunicorn
 sqlalchemy
 psycopg2-binary
 psycopg[binary]
+boto3

@@ -19,6 +19,7 @@ import urllib.request
 from sqlalchemy import create_engine, text
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
+import auth_email
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -122,6 +123,8 @@ def init_database():
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """))
+
+        auth_email.migrate(conn)
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS profiles (
@@ -3038,7 +3041,7 @@ def _app_nav_html(username=None):
 """
 
 
-def _auth_page(title, message=""):
+def _auth_page(title, message="", form_html=None):
     safe_title = html.escape(title)
     safe_message = html.escape(message or "")
     message_html = f'<div class="message">{safe_message}</div>' if safe_message else ""
@@ -3046,6 +3049,9 @@ def _auth_page(title, message=""):
     turnstile_script = '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' if is_register_page and TURNSTILE_SITE_KEY else ""
     turnstile_widget = f'<div class="turnstile-wrap"><div class="cf-turnstile" data-sitekey="{html.escape(TURNSTILE_SITE_KEY)}"></div></div>' if is_register_page and TURNSTILE_SITE_KEY else ""
     turnstile_missing = '<div class="message">Turnstile is not configured yet.</div>' if is_register_page and not TURNSTILE_SITE_KEY else ""
+    if form_html is None:
+        form_html = f'<label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label>{turnstile_widget}<button type="submit">{safe_title}</button>'
+    csrf_field = auth_email.csrf_field()
     return f"""
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3062,10 +3068,12 @@ button {{ width:100%; margin-top:18px; padding:14px; border:none; border-radius:
 .turnstile-wrap {{ margin-top:16px; display:flex; justify-content:center; }}
 .show-pass-row {{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:700; color:#333; }}
 .show-pass-row input {{ width:auto; padding:0; margin:0; }}
-.nav {{ margin-top:18px; text-align:center; font-size:14px; }} a {{ color:#111; font-weight:800; }}
+.nav {{ margin-top:18px; text-align:center; font-size:14px; line-height:1.7; }} a {{ color:#111; font-weight:800; }}
+@media (max-width:520px) {{ .auth-wrap {{ margin:24px 12px; padding:22px; }} }}
 </style></head><body>
 <div class="auth-wrap"><h1>{safe_title}</h1><p>Create or access your BUTTN account.</p>{message_html}{turnstile_missing}
-<form method="post"><label>Email</label><input type="email" name="email" required autocomplete="email"><label>Password</label><input id="password_field" type="password" name="password" required autocomplete="current-password"><label class="show-pass-row"><input id="show_password_toggle" type="checkbox"> Show Password</label>{turnstile_widget}<button type="submit">{safe_title}</button></form>
+<form method="post">{csrf_field}{form_html}</form>
+<div class="nav"><a href="/forgot-password">Forgot Password?</a> &nbsp; | &nbsp; <a href="/resend-verification">Resend verification email</a></div>
 <div class="nav"><a href="/register">Create Account</a> &nbsp; | &nbsp; <a href="/login">Log In</a> &nbsp; | &nbsp; <a href="/account">My Account</a></div>
 <script>
 const showPasswordToggle = document.getElementById("show_password_toggle");
@@ -3311,6 +3319,8 @@ def register():
     if engine is None:
         return _auth_page("Create Account", "Database is not connected yet.")
     if request.method == "POST":
+        if not auth_email.valid_csrf():
+            return _auth_page("Create Account", "Please reload the page and try again."), 400
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
         turnstile_token = request.form.get("cf-turnstile-response") or ""
@@ -3322,19 +3332,24 @@ def register():
             return _auth_page("Create Account", "Password must be at least 6 characters.")
         try:
             init_database()
+            if len(email) > 254 or "@" not in email:
+                return _auth_page("Create Account", "Please enter a valid email address.")
+            if not auth_email.allowed(engine, email):
+                return _auth_page("Create Account", "Too many requests. Please try again in an hour."), 429
             password_hash = generate_password_hash(password)
             with engine.begin() as conn:
                 user = conn.execute(text("""
-                    INSERT INTO users (email, password_hash, account_type, trial_started_at, trial_ends_at)
-                    VALUES (:email, :password_hash, :account_type,
+                    INSERT INTO users (email, password_hash, account_type, email_verified, trial_started_at, trial_ends_at)
+                    VALUES (:email, :password_hash, :account_type, FALSE,
                             CASE WHEN :account_type = 'trial' THEN NOW() ELSE NULL END,
                             CASE WHEN :account_type = 'trial' THEN NOW() + INTERVAL '30 days' ELSE NULL END)
                     RETURNING id, email
                 """), {"email": email, "password_hash": password_hash,
                       "account_type": _registration_account_type(email)}).mappings().one()
-            session["user_id"] = user["id"]
-            session["user_email"] = user["email"]
-            return redirect("/account")
+            session.clear()
+            sent = auth_email.send_for_user(engine, user, "verify")
+            message = "Account created. Check your email to verify your account before logging in." if sent else "Account created, but we could not send your verification email. Please use Resend verification email to try again."
+            return _auth_page("Verify your email", message, form_html="")
         except Exception as exc:
             msg = str(exc)
             if "duplicate" in msg.lower() or "unique" in msg.lower():
@@ -3345,6 +3360,8 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if request.method == "POST" and not auth_email.valid_csrf():
+        return _auth_page("Log In", "Please reload the page and try again."), 400
     if engine is None:
         return _auth_page("Log In", "Database is not connected yet.")
     if request.method == "POST":
@@ -3353,8 +3370,11 @@ def login():
         try:
             init_database()
             with engine.connect() as conn:
-                user = conn.execute(text("SELECT id, email, password_hash FROM users WHERE email = :email"), {"email": email}).mappings().first()
+                user = conn.execute(text("SELECT id, email, password_hash, email_verified FROM users WHERE email = :email"), {"email": email}).mappings().first()
             if user and check_password_hash(user["password_hash"], password):
+                if not user["email_verified"]:
+                    return _auth_page("Log In", "Please verify your email before logging in. Use Resend verification email if needed.")
+                session.clear()
                 session["user_id"] = user["id"]
                 session["user_email"] = user["email"]
                 return redirect("/account")
@@ -6817,3 +6837,6 @@ initPlanPreview();
 @app.route("/buttn/edit/test", methods=["GET", "POST"])
 def buttn_edit_test_alias():
     return buttn_edit_profile("test")
+
+
+auth_email.install(app, lambda: engine, init_database, _auth_page)
